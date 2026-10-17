@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
+
                 SecureCalendarApp()
             }
         }
