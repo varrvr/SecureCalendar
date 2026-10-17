@@ -1,21 +1,15 @@
+
 package com.example.calendar.presentation.calendar.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,27 +17,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import monthFormatter
-import ruLocale
+import com.example.calendar.util.monthFormatter
+import com.example.calendar.util.ruLocale
 import java.time.LocalDate
 import java.time.YearMonth
 
-// -------------------- MONTH CALENDAR --------------------
 
-fun buildMonthDates(
-    month: YearMonth
-): List<LocalDate> {
-
+fun buildMonthDates(month: YearMonth): List<LocalDate> {
     val firstDay = month.atDay(1)
-
     val offset = firstDay.dayOfWeek.value - 1
-
-    val gridStart = firstDay.minusDays(
-        offset.toLong()
-    )
-
-    val requiredCells = offset + month.lengthOfMonth()
-    val rows = (requiredCells + 6) / 7
+    val gridStart = firstDay.minusDays(offset.toLong())
+    val rows = (offset + month.lengthOfMonth() + 6) / 7
 
     return (0 until rows * 7).map {
         gridStart.plusDays(it.toLong())
@@ -57,44 +41,53 @@ fun MonthCalendar(
     datesWithEvents: Set<LocalDate>,
     onDateSelected: (LocalDate) -> Unit,
     onPreviousMonth: () -> Unit,
-    onNextMonth: () -> Unit
+    onNextMonth: () -> Unit,
+    onTodayClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Column {
+    val today = LocalDate.now()
 
+    Column(modifier) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically
         ) {
-
-            TextButton(onClick = onPreviousMonth) {
-                Text("‹", style = MaterialTheme.typography.headlineSmall)
-            }
-
             Text(
                 text = month.format(monthFormatter)
                     .replaceFirstChar { it.titlecase(ruLocale) },
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f)
             )
 
-            TextButton(onClick = onNextMonth) {
-                Text("›", style = MaterialTheme.typography.headlineSmall)
+            TextButton(onClick = onTodayClick) {
+                Text("Сегодня")
+            }
+
+            IconButton(onClick = onPreviousMonth) {
+                Icon(
+                    Icons.Default.KeyboardArrowLeft,
+                    contentDescription = "Предыдущий месяц"
+                )
+            }
+
+            IconButton(onClick = onNextMonth) {
+                Icon(
+                    Icons.Default.KeyboardArrowRight,
+                    contentDescription = "Следующий месяц"
+                )
             }
         }
 
         Spacer(Modifier.height(12.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Row(Modifier.fillMaxWidth()) {
             listOf(
                 "Пн", "Вт", "Ср", "Чт",
                 "Пт", "Сб", "Вс"
-            ).forEach { name ->
-
+            ).forEach { day ->
                 Text(
-                    text = name,
+                    text = day,
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -105,75 +98,69 @@ fun MonthCalendar(
 
         Spacer(Modifier.height(8.dp))
 
-        val dates = buildMonthDates(month)
-
-        dates.chunked(7).forEach { week ->
-
-            Row(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-
+        buildMonthDates(month).chunked(7).forEach { week ->
+            Row(Modifier.fillMaxWidth()) {
                 week.forEach { date ->
-
-                    val isSelected = date == selectedDate
-                    val isCurrentMonth =
-                        YearMonth.from(date) == month
-
-                    val background = if (isSelected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        Color.Transparent
-                    }
+                    val selected = date == selectedDate
+                    val currentMonth = YearMonth.from(date) == month
+                    val isToday = date == today
 
                     val textColor = when {
-                        isSelected ->
-                            MaterialTheme.colorScheme.onPrimary
-
-                        isCurrentMonth ->
-                            MaterialTheme.colorScheme.onSurface
-
-                        else ->
-                            MaterialTheme.colorScheme.outline
+                        selected -> MaterialTheme.colorScheme.onPrimary
+                        !currentMonth -> MaterialTheme.colorScheme.outline
+                        isToday -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurface
                     }
 
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .height(54.dp)
+                            .height(52.dp)
                             .padding(2.dp)
                             .background(
-                                background,
-                                RoundedCornerShape(12.dp)
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    Color.Transparent
+                                },
+                                shape = RoundedCornerShape(12.dp)
                             )
-                            .clickable {
-                                onDateSelected(date)
-                            },
+                            .clickable { onDateSelected(date) },
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-
                         Text(
                             text = date.dayOfMonth.toString(),
                             color = textColor,
-                            fontWeight = if (isSelected) {
+                            fontWeight = if (selected || isToday) {
                                 FontWeight.Bold
                             } else {
                                 FontWeight.Normal
-                            }
+                            },
+                            style = MaterialTheme.typography.bodyMedium
                         )
 
                         if (date in datesWithEvents) {
-                            Spacer(Modifier.height(4.dp))
+                            Spacer(Modifier.height(3.dp))
 
                             Box(
                                 modifier = Modifier
                                     .size(5.dp)
                                     .background(
-                                        if (isSelected) {
+                                        color = if (selected) {
                                             MaterialTheme.colorScheme.onPrimary
                                         } else {
                                             MaterialTheme.colorScheme.primary
                                         },
+                                        shape = CircleShape
+                                    )
+                            )
+                        } else if (isToday && !selected) {
+                            Box(
+                                modifier = Modifier
+                                    .size(3.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.primary,
                                         CircleShape
                                     )
                             )
@@ -184,4 +171,3 @@ fun MonthCalendar(
         }
     }
 }
-

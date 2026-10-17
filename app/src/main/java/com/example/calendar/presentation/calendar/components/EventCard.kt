@@ -1,47 +1,32 @@
+
 package com.example.calendar.presentation.calendar.components
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.calendar.data.local.EventEntity
-import endInstant
-import formatTime
-import startInstant
-
-// -------------------- EVENT CARD --------------------
+import com.example.calendar.util.endInstant
+import com.example.calendar.util.formatTime
+import com.example.calendar.util.startInstant
 
 @Composable
 fun EventCard(
     event: EventEntity,
     onClick: () -> Unit
 ) {
-    val start = event.startInstant()
-    val end = event.endInstant()
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor =
-                MaterialTheme.colorScheme.surfaceContainerLow
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-
+        Column(Modifier.padding(16.dp)) {
             Text(
                 text = event.title,
                 style = MaterialTheme.typography.titleMedium,
@@ -51,7 +36,8 @@ fun EventCard(
             Spacer(Modifier.height(6.dp))
 
             Text(
-                text = "${formatTime(start)}–${formatTime(end)}",
+                text = "${formatTime(event.startInstant())}–" +
+                        formatTime(event.endInstant()),
                 style = MaterialTheme.typography.bodyMedium
             )
 
@@ -73,4 +59,3 @@ fun EventCard(
         }
     }
 }
-
