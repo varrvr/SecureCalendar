@@ -22,7 +22,7 @@ class LocalAuthRepositoryImpl(
     override suspend fun register(displayName: String, username: String, password: CharArray): LocalAuthResult = withContext(Dispatchers.IO) {
         val normalized = username.trim().lowercase()
         val name = displayName.trim()
-        if (name.isEmpty() || normalized.length !in 3..64 || password.size < 8) {
+        if (name.isEmpty() || normalized.length !in 3..64 || password.size !in 8..1024) {
             password.fill('\u0000')
             return@withContext LocalAuthResult.Failure("Имя, логин или пароль не соответствуют требованиям")
         }
@@ -48,6 +48,10 @@ class LocalAuthRepositoryImpl(
 
     override suspend fun login(username: String, password: CharArray): LocalAuthResult = withContext(Dispatchers.IO) {
         val normalized = username.trim().lowercase()
+        if (password.size > 1024) {
+            password.fill('\u0000')
+            return@withContext LocalAuthResult.InvalidCredentials
+        }
         val now = System.currentTimeMillis()
         val failure = attempts.computeIfAbsent(normalized) { Failures() }
         if (now < failure.blockedUntil) {

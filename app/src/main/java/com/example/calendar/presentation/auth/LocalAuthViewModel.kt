@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
+import android.database.sqlite.SQLiteException
+import java.security.GeneralSecurityException
 
 data class AuthOperationState(
     val isLoading: Boolean = false,
@@ -42,8 +44,13 @@ class LocalAuthViewModel(private val repository: LocalAuthRepository) : ViewMode
                 }
             } catch (error: CancellationException) {
                 throw error
-            } catch (_: Exception) {
-                _state.value = AuthOperationState(error = "Не удалось выполнить операцию. Повторите попытку")
+            } catch (error: Exception) {
+                val message = when (error) {
+                    is SQLiteException -> "Не удалось сохранить аккаунт в локальной базе данных. (${error.javaClass.simpleName})"
+                    is GeneralSecurityException -> "На устройстве недоступна проверка пароля. (${error.javaClass.simpleName})"
+                    else -> "Не удалось выполнить операцию. (${error.javaClass.simpleName})"
+                }
+                _state.value = AuthOperationState(error = message)
             } finally {
                 passwordChars.fill('\u0000')
             }
