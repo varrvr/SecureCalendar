@@ -49,44 +49,34 @@ dependencies {
         "com.android.tools:desugar_jdk_libs:2.1.5"
     )
     implementation(libs.androidx.core.ktx)
-
     implementation(libs.androidx.activity.compose)
-
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
-
     implementation(platform(libs.androidx.compose.bom))
-
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
-
+    implementation(libs.okhttp)
     ksp(libs.androidx.room.compiler)
-
     testImplementation(libs.junit)
-
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-
     androidTestImplementation(
         platform(libs.androidx.compose.bom)
     )
-
     androidTestImplementation(
         libs.androidx.compose.ui.test.junit4
     )
-
     debugImplementation(
         libs.androidx.compose.ui.tooling
     )
-
     debugImplementation(
         libs.androidx.compose.ui.test.manifest
     )
-
     implementation("androidx.compose.material:material-icons-extended")
+    implementation(files("libs/opaque_ke_uniffi-release.aar"))
+    implementation("net.java.dev.jna:jna:5.14.0@aar")
 }

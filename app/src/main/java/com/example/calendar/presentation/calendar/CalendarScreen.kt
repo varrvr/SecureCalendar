@@ -12,7 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.calendar.data.local.EventEntity
+import com.example.calendar.domain.model.CalendarEvent
 import com.example.calendar.presentation.calendar.components.EventCard
 import com.example.calendar.presentation.calendar.components.MonthCalendar
 import com.example.calendar.presentation.calendar.components.buildMonthDates
@@ -28,12 +28,12 @@ import java.time.format.DateTimeFormatter
 fun CalendarScreen(
     displayedMonth: YearMonth,
     selectedDate: LocalDate,
-    events: List<EventEntity>,
+    events: List<CalendarEvent>,
     onDateSelected: (LocalDate) -> Unit,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onTodayClick: () -> Unit,
-    onEventClick: (EventEntity) -> Unit,
+    onEventClick: (CalendarEvent) -> Unit,
     onAddEventClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -42,15 +42,15 @@ fun CalendarScreen(
     val bounds = dayBounds(selectedDate, zone)
 
     val selectedEvents = events
-        .filter { it.overlaps(bounds.start, bounds.end) }
-        .sortedBy { it.startTime }
+        .filter { it.start.isBefore(bounds.end) && it.end.isAfter(bounds.start) }
+        .sortedBy { it.start }
 
     val datesWithEvents = buildMonthDates(displayedMonth)
         .filter { date ->
             val interval = dayBounds(date, zone)
 
             events.any {
-                it.overlaps(interval.start, interval.end)
+                it.start.isBefore(interval.end) && it.end.isAfter(interval.start)
             }
         }
         .toSet()

@@ -8,7 +8,8 @@ import androidx.room.PrimaryKey
     tableName = "events",
     indices = [
         Index("startTime"),
-        Index("endTime")
+        Index("endTime"),
+        Index("ownerId")
     ]
 )
 data class EventEntity(
@@ -21,5 +22,7 @@ data class EventEntity(
 
     val endTime: Long,
 
-    val isPublic: Boolean = false
+    val isPublic: Boolean = false,
+
+    val ownerId: Long
 )

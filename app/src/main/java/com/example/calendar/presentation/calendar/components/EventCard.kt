@@ -8,14 +8,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.calendar.data.local.EventEntity
-import com.example.calendar.util.endInstant
+import com.example.calendar.domain.model.CalendarEvent
 import com.example.calendar.util.formatTime
-import com.example.calendar.util.startInstant
 
 @Composable
 fun EventCard(
-    event: EventEntity,
+    event: CalendarEvent,
     onClick: () -> Unit
 ) {
     Card(
@@ -36,8 +34,8 @@ fun EventCard(
             Spacer(Modifier.height(6.dp))
 
             Text(
-                text = "${formatTime(event.startInstant())}–" +
-                        formatTime(event.endInstant()),
+                text = "${formatTime(event.start)}–" +
+                        formatTime(event.end),
                 style = MaterialTheme.typography.bodyMedium
             )
 

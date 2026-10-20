@@ -10,17 +10,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 data class ProfileUiState(
-    val username: String = "Тестовый пользователь",
-    val login: String = "demo",
+    val username: String = "",
+    val login: String = "",
     val isConnected: Boolean = false,
-    val publicKeyFingerprint: String =
-        "Тестовые данные: ключ ещё не создан"
+    val serverRegistrationStatus: String = "NOT_REGISTERED",
+    val serverAuthenticated: Boolean = false,
+    val serverConfigured: Boolean = false,
+    val publicKeyFingerprint: String? = null
 )
 
 @Composable
 fun ProfileScreen(
     state: ProfileUiState,
     onShowQrClick: () -> Unit,
+    onConnectClick: () -> Unit,
     onLogoutClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -70,21 +73,32 @@ fun ProfileScreen(
 
                 HorizontalDivider()
 
-                Text(
-                    "Отпечаток публичного ключа",
-                    style = MaterialTheme.typography.labelMedium
-                )
-
-                Text(state.publicKeyFingerprint)
+                Text("OPAQUE: ${if (state.serverRegistrationStatus == "REGISTERED") "зарегистрирован" else "не зарегистрирован"}")
+                Text("Серверная авторизация: ${if (state.serverAuthenticated) "выполнена" else "не выполнена"}")
+                Text("Публичный ключ: ${state.publicKeyFingerprint ?: "Криптографический ключ ещё не создан"}")
             }
         }
 
+        if (!state.serverConfigured) {
+            Text(
+                "Адрес сервера и согласованные параметры OPAQUE не настроены.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
         Button(
-            onClick = onShowQrClick,
+            onClick = onConnectClick,
+            enabled = state.serverConfigured,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Показать QR-код ключа")
+            Text(if (state.isConnected) "Подключено к серверу" else if (state.serverConfigured) "Подключиться к серверу" else "Сервер не настроен")
         }
+
+        OutlinedButton(
+            onClick = onShowQrClick,
+            enabled = state.publicKeyFingerprint != null,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Показать QR-код ключа") }
 
         OutlinedButton(
             onClick = onLogoutClick,

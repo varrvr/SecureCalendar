@@ -1,7 +1,6 @@
 
 package com.example.calendar.presentation.comparison
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -19,7 +18,7 @@ import java.time.format.DateTimeFormatter
 enum class ComparisonStatus {
     INITIAL,
     WAITING,
-    RUNNING,
+    PROCESSING,
     SUCCESS,
     EMPTY,
     REJECTED,
@@ -27,7 +26,6 @@ enum class ComparisonStatus {
 }
 
 data class ComparisonUiState(
-    val users: List<String> = emptyList(),
     val selectedUser: String? = null,
     val periodStart: LocalDate = LocalDate.now(),
     val periodEnd: LocalDate = LocalDate.now().plusDays(7),
@@ -45,13 +43,8 @@ fun ComparisonScreen(
     onPeriodEndChanged: (LocalDate) -> Unit,
     onRequestClick: () -> Unit,
     onRetryClick: () -> Unit,
-    onDemoStatusSelected: ((ComparisonStatus) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    var expanded by remember {
-        mutableStateOf(false)
-    }
-
     var selectStart by remember {
         mutableStateOf<Boolean?>(null)
     }
@@ -79,41 +72,15 @@ fun ComparisonScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = it }
-        ) {
-            OutlinedTextField(
-                value = state.selectedUser ?: "",
-                onValueChange = {},
-                readOnly = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
-                label = { Text("Пользователь") },
-                placeholder = { Text("Выберите пользователя") },
-                trailingIcon = {
-                    ExposedDropdownMenuDefaults.TrailingIcon(
-                        expanded
-                    )
-                }
-            )
-
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
-            ) {
-                state.users.forEach { user ->
-                    DropdownMenuItem(
-                        text = { Text(user) },
-                        onClick = {
-                            onUserSelected(user)
-                            expanded = false
-                        }
-                    )
-                }
-            }
-        }
+        OutlinedTextField(
+            value = state.selectedUser.orEmpty(),
+            onValueChange = onUserSelected,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Логин пользователя") },
+            placeholder = { Text("Введите логин") },
+            singleLine = true,
+            enabled = state.status != ComparisonStatus.WAITING && state.status != ComparisonStatus.PROCESSING
+        )
 
         OutlinedButton(
             onClick = { selectStart = true },
@@ -144,36 +111,14 @@ fun ComparisonScreen(
             onClick = onRequestClick,
             enabled = state.selectedUser != null &&
                     !state.periodEnd.isBefore(state.periodStart) &&
-                    state.status != ComparisonStatus.RUNNING &&
+                    state.status != ComparisonStatus.PROCESSING &&
                     state.status != ComparisonStatus.WAITING,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Запросить сравнение")
         }
 
-        if (onDemoStatusSelected != null) {
-            Text(
-                "Демонстрация состояний (без сервера)",
-                style = MaterialTheme.typography.labelMedium
-            )
-
-            Row(
-                modifier = Modifier.horizontalScroll(
-                    rememberScrollState()
-                ),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ComparisonStatus.entries.forEach { status ->
-                    FilterChip(
-                        selected = state.status == status,
-                        onClick = {
-                            onDemoStatusSelected(status)
-                        },
-                        label = { Text(status.name) }
-                    )
-                }
-            }
-        }
+        Text("Поиск и защищённый обмен требуют серверной сессии и доступного PSI-модуля.", color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         when (state.status) {
             ComparisonStatus.INITIAL -> {
@@ -184,7 +129,7 @@ fun ComparisonScreen(
                 Text("Ожидание ответа пользователя")
             }
 
-            ComparisonStatus.RUNNING -> {
+            ComparisonStatus.PROCESSING -> {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth()
                 )

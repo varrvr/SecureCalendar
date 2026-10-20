@@ -8,9 +8,13 @@ import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.calendar.domain.model.TimeInterval
+import androidx.activity.compose.BackHandler
+import com.example.calendar.SecureCalendarApplication
+import com.example.calendar.di.AppViewModelFactory
+import com.example.calendar.presentation.auth.LocalAuthViewModel
 import com.example.calendar.presentation.auth.*
 import com.example.calendar.presentation.calendar.CalendarScreen
 import com.example.calendar.presentation.calendar.CalendarViewModel
@@ -18,7 +22,6 @@ import com.example.calendar.presentation.comparison.*
 import com.example.calendar.presentation.editor.EventEditorScreen
 import com.example.calendar.presentation.profile.*
 import java.time.LocalDate
-import java.time.ZoneId
 
 
 enum class AppPage {
@@ -31,8 +34,15 @@ enum class AppPage {
 
 @Composable
 fun SecureCalendarApp(
-    calendarViewModel: CalendarViewModel = viewModel()
+    calendarViewModel: CalendarViewModel = viewModel(
+        factory = AppViewModelFactory(LocalContext.current.applicationContext.let { it as SecureCalendarApplication }.container)
+    ),
+    authViewModel: LocalAuthViewModel = viewModel(
+        factory = AppViewModelFactory(LocalContext.current.applicationContext.let { it as SecureCalendarApplication }.container)
+    )
 ) {
+    val application = LocalContext.current.applicationContext as SecureCalendarApplication
+    val authOperation by authViewModel.state.collectAsState()
     var page by remember {
         mutableStateOf(AppPage.LOGIN)
     }
@@ -51,18 +61,30 @@ fun SecureCalendarApp(
 
     var comparison by remember {
         mutableStateOf(
-            ComparisonUiState(
-                users = listOf("Алиса", "Боб", "Мария")
-            )
+            ComparisonUiState()
         )
-    }
-
-    var showQrInfo by remember {
-        mutableStateOf(false)
     }
 
     val events by calendarViewModel.events.collectAsState()
     val editor = calendarViewModel.editorState
+
+    LaunchedEffect(authOperation.account) {
+        authOperation.account?.let { account ->
+            profileState = ProfileUiState(
+                username = account.displayName,
+                login = account.username,
+                serverRegistrationStatus = account.serverRegistrationStatus.name
+            )
+            loginState = LoginUiState()
+            registerState = RegisterUiState()
+            page = AppPage.CALENDAR
+            authViewModel.consumeResult()
+        }
+    }
+
+    BackHandler(enabled = page == AppPage.CALENDAR || page == AppPage.COMPARISON || page == AppPage.PROFILE || editor != null) {
+        if (editor != null) calendarViewModel.closeEditor() else page = AppPage.CALENDAR
+    }
 
     val showTabs = editor == null &&
             page in listOf(
@@ -136,7 +158,7 @@ fun SecureCalendarApp(
             when (page) {
                 AppPage.LOGIN -> {
                     LoginScreen(
-                        state = loginState,
+                        state = loginState.copy(isLoading = authOperation.isLoading, error = authOperation.error ?: loginState.error),
                         onLoginChange = {
                             loginState = loginState.copy(
                                 login = it,
@@ -167,15 +189,9 @@ fun SecureCalendarApp(
                                 passwordError = passwordError
                             )
 
-                            if (
-                                loginError == null &&
-                                passwordError == null
-                            ) {
-                                profileState = profileState.copy(
-                                    login = loginState.login
-                                )
-
-                                page = AppPage.CALENDAR
+                            if (loginError == null && passwordError == null) {
+                                authViewModel.login(loginState.login, loginState.password)
+                                loginState = loginState.copy(password = "", isLoading = true, error = null)
                             }
                         },
                         onRegisterClick = {
@@ -187,7 +203,7 @@ fun SecureCalendarApp(
 
                 AppPage.REGISTER -> {
                     RegisterScreen(
-                        state = registerState,
+                        state = registerState.copy(isLoading = authOperation.isLoading, error = authOperation.error ?: registerState.error),
                         onUsernameChange = {
                             registerState = registerState.copy(
                                 username = it,
@@ -246,20 +262,14 @@ fun SecureCalendarApp(
                                 confirmPasswordError = confirmError
                             )
 
-                            if (
-                                listOf(
+                            if (listOf(
                                     nameError,
                                     loginError,
                                     passwordError,
                                     confirmError
-                                ).all { it == null }
-                            ) {
-                                profileState = profileState.copy(
-                                    username = registerState.username,
-                                    login = registerState.login
-                                )
-
-                                page = AppPage.CALENDAR
+                                ).all { it == null }) {
+                                authViewModel.register(registerState.username, registerState.login, registerState.password)
+                                registerState = registerState.copy(password = "", confirmPassword = "", isLoading = true, error = null)
                             }
                         },
                         onLoginClick = {
@@ -305,51 +315,13 @@ fun SecureCalendarApp(
                         },
                         onRequestClick = {
                             comparison = comparison.copy(
-                                status = ComparisonStatus.WAITING
+                                status = ComparisonStatus.ERROR,
+                                error = "Защищённое сравнение пока недоступно: нет серверной сессии и Bee2 PSI-движка"
                             )
                         },
                         onRetryClick = {
                             comparison = comparison.copy(
                                 status = ComparisonStatus.INITIAL
-                            )
-                        },
-                        onDemoStatusSelected = { status ->
-                            val zone = ZoneId.systemDefault()
-                            val today = LocalDate.now()
-
-                            val intervals = listOf(
-                                TimeInterval(
-                                    today.atTime(10, 30)
-                                        .atZone(zone)
-                                        .toInstant(),
-                                    today.atTime(11, 0)
-                                        .atZone(zone)
-                                        .toInstant()
-                                ),
-                                TimeInterval(
-                                    today.plusDays(1)
-                                        .atTime(15, 30)
-                                        .atZone(zone)
-                                        .toInstant(),
-                                    today.plusDays(1)
-                                        .atTime(16, 0)
-                                        .atZone(zone)
-                                        .toInstant()
-                                )
-                            )
-
-                            comparison = comparison.copy(
-                                status = status,
-                                intersections =
-                                    if (status == ComparisonStatus.SUCCESS) {
-                                        intervals
-                                    } else {
-                                        emptyList()
-                                    },
-                                error =
-                                    if (status == ComparisonStatus.ERROR) {
-                                        "Не удалось выполнить сравнение"
-                                    } else null
                             )
                         },
                         modifier = modifier
@@ -359,12 +331,14 @@ fun SecureCalendarApp(
                 AppPage.PROFILE -> {
                     ProfileScreen(
                         state = profileState,
-                        onShowQrClick = {
-                            showQrInfo = true
-                        },
+                        onShowQrClick = {},
+                        onConnectClick = {},
                         onLogoutClick = {
+                            application.container.sessionRepository.clearSession()
                             loginState = LoginUiState()
                             registerState = RegisterUiState()
+                            profileState = ProfileUiState()
+                            calendarViewModel.closeEditor()
                             page = AppPage.LOGIN
                         },
                         modifier = modifier
@@ -374,29 +348,4 @@ fun SecureCalendarApp(
         }
     }
 
-    if (showQrInfo) {
-        AlertDialog(
-            onDismissRequest = {
-                showQrInfo = false
-            },
-            title = {
-                Text("QR-код публичного ключа")
-            },
-            text = {
-                Text(
-                    "Здесь будет отображаться QR-код, " +
-                            "когда другой разработчик подключит работу с ключами."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showQrInfo = false
-                    }
-                ) {
-                    Text("Понятно")
-                }
-            }
-        )
-    }
 }

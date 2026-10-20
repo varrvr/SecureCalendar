@@ -1,20 +1,21 @@
 
 package com.example.calendar.presentation.calendar
 
-import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.calendar.data.local.CalendarDatabase
-import com.example.calendar.data.local.EventEntity
+import com.example.calendar.domain.model.CalendarEvent
 import com.example.calendar.domain.model.CalendarTab
 import com.example.calendar.domain.model.TimeInterval
+import com.example.calendar.domain.repository.EventRepository
+import com.example.calendar.domain.repository.SessionRepository
 import com.example.calendar.presentation.editor.EventEditorUiState
 import com.example.calendar.util.endInstant
 import com.example.calendar.util.startInstant
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -23,14 +24,11 @@ import java.time.YearMonth
 import java.time.ZoneId
 
 class CalendarViewModel(
-    application: Application
-) : AndroidViewModel(application) {
+    private val eventRepository: EventRepository,
+    private val sessionRepository: SessionRepository
+) : ViewModel() {
 
-    private val dao = CalendarDatabase
-        .getInstance(application)
-        .eventDao()
-
-    val events = dao.observeAll().stateIn(
+    val events = eventRepository.observeEvents().stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = emptyList()
@@ -45,7 +43,22 @@ class CalendarViewModel(
     var editorState by mutableStateOf<EventEditorUiState?>(null)
         private set
 
-    private var editedEvent: EventEntity? = null
+    private var editedEvent: CalendarEvent? = null
+    private var editorOwnerId: Long? = null
+    private var previousOwnerId: Long? = sessionRepository.activeUserId.value
+
+    init {
+        viewModelScope.launch {
+            sessionRepository.activeUserId.collect { userId ->
+                if (previousOwnerId != userId) {
+                    editorState = null
+                    editedEvent = null
+                    editorOwnerId = null
+                    previousOwnerId = userId
+                }
+            }
+        }
+    }
 
     fun selectDate(date: LocalDate) {
         selectedDate = date
@@ -65,6 +78,8 @@ class CalendarViewModel(
     }
 
     fun openCreateEditor() {
+        editorOwnerId = sessionRepository.activeUserId.value
+        if (editorOwnerId == null) return
         editedEvent = null
         editorState = EventEditorUiState(
             startDate = selectedDate,
@@ -72,14 +87,14 @@ class CalendarViewModel(
         )
     }
 
-    fun openEditEditor(event: EventEntity) {
+    fun openEditEditor(event: CalendarEvent) {
+        if (event.ownerId != sessionRepository.activeUserId.value) return
+        editorOwnerId = event.ownerId
         editedEvent = event
 
-        val start = event.startInstant()
-            .atZone(ZoneId.systemDefault())
+        val start = event.start.atZone(ZoneId.systemDefault())
 
-        val end = event.endInstant()
-            .atZone(ZoneId.systemDefault())
+        val end = event.end.atZone(ZoneId.systemDefault())
 
         editorState = EventEditorUiState(
             isEditing = true,
@@ -96,6 +111,7 @@ class CalendarViewModel(
         if (editorState?.isSaving != true) {
             editorState = null
             editedEvent = null
+            editorOwnerId = null
         }
     }
 
@@ -165,6 +181,12 @@ class CalendarViewModel(
         val state = editorState ?: return
         if (state.isSaving) return
 
+        val ownerId = editorOwnerId
+        if (ownerId == null || ownerId != sessionRepository.activeUserId.value) {
+            editorState = null
+            editedEvent = null
+            return
+        }
         val start = state.startDate
             .atTime(state.startTime)
             .atZone(ZoneId.systemDefault())
@@ -204,22 +226,24 @@ class CalendarViewModel(
 
         viewModelScope.launch {
             try {
-                val entity = EventEntity(
+                val event = CalendarEvent(
                     id = editedEvent?.id ?: 0L,
                     title = state.title.trim(),
-                    startTime = start.toEpochMilli(),
-                    endTime = end.toEpochMilli(),
-                    isPublic = state.isPublic
+                    start = start,
+                    end = end,
+                    isPublic = state.isPublic,
+                    ownerId = ownerId
                 )
 
                 if (editedEvent == null) {
-                    dao.insert(entity)
+                    eventRepository.create(event).getOrThrow()
                 } else {
-                    dao.update(entity)
+                    eventRepository.update(event).getOrThrow()
                 }
 
                 editorState = null
                 editedEvent = null
+                editorOwnerId = null
             } catch (e: Exception) {
                 editorState = editorState?.copy(
                     isSaving = false,
@@ -239,9 +263,11 @@ class CalendarViewModel(
 
         viewModelScope.launch {
             try {
-                dao.delete(event)
+                if (event.ownerId != sessionRepository.activeUserId.value) return@launch
+                eventRepository.delete(event.id).getOrThrow()
                 editedEvent = null
                 editorState = null
+                editorOwnerId = null
             } catch (e: Exception) {
                 editorState = editorState?.copy(
                     isSaving = false,
@@ -255,32 +281,7 @@ class CalendarViewModel(
         period: TimeInterval,
         publicOnly: Boolean
     ): List<TimeInterval> {
-        val start = period.start.toEpochMilli()
-        val end = period.end.toEpochMilli()
-
-        val rows = if (publicOnly) {
-            dao.getPublicForPeriod(start, end)
-        } else {
-            dao.getForPeriod(start, end)
-        }
-
-        return rows.mapNotNull { event ->
-            val intervalStart = maxOf(
-                event.startInstant(),
-                period.start
-            )
-
-            val intervalEnd = minOf(
-                event.endInstant(),
-                period.end
-            )
-
-            if (intervalEnd.isAfter(intervalStart)) {
-                TimeInterval(intervalStart, intervalEnd)
-            } else {
-                null
-            }
-        }
+        return eventRepository.getIntervals(period, publicOnly)
     }
 
     fun selectTab(calendar: CalendarTab) {}

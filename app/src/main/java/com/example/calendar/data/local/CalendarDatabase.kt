@@ -4,15 +4,25 @@ import android.app.Application
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.example.calendar.data.local.auth.LocalUserDao
+import com.example.calendar.data.local.auth.LocalUserEntity
+import com.example.calendar.data.local.migration.MIGRATION_1_2
+import com.example.calendar.data.local.migration.MIGRATION_2_3
 
 @Database(
-    entities = [EventEntity::class],
-    version = 1,
+    entities = [
+        EventEntity::class,
+        LocalUserEntity::class
+    ],
+    version = 3,
     exportSchema = false
 )
 abstract class CalendarDatabase : RoomDatabase() {
 
     abstract fun eventDao(): EventDao
+
+    abstract fun localUserDao(): LocalUserDao
+
     companion object {
 
         @Volatile
@@ -24,9 +34,11 @@ abstract class CalendarDatabase : RoomDatabase() {
                     application,
                     CalendarDatabase::class.java,
                     "secure_calendar.db"
-                ).build().also {
-                    instance = it
-                }
+                )
+                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_2_3)
+                    .build()
+                    .also { instance = it }
             }
         }
     }
