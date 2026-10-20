@@ -1,0 +1,22 @@
+[package]
+name = "opaque-snake"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Python bindings for the OPAQUE password-authenticated key exchange protocol"
+
+[lib]
+name = "_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module", "abi3-py39"] }
+opaque-ke = "=4.0.1"
+p256 = { version = "0.13", features = ["hash2curve", "voprf"] }
+rand = "0.8"
+sha2 = "0.10"
+thiserror = "2.0"
+zeroize = { version = "1.8", features = ["derive"] }
+
+[dev-dependencies]
+pyo3 = { version = "0.23", features = ["auto-initialize"] }

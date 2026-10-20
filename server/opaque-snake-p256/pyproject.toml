@@ -1,0 +1,37 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "opaque-snake"
+version = "0.1.0"
+description = "Pythonic OPAQUE password-authenticated key exchange"
+readme = "README.md"
+license = { text = "MIT OR Apache-2.0" }
+license-files = ["LICENSE-*"]
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security :: Cryptography",
+]
+keywords = ["opaque", "pake", "authentication", "cryptography", "password"]
+
+[project.urls]
+Repository = "https://github.com/cvwright/opaque-snake"
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-cov", "mypy"]
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+python-source = "."
+module-name = "opaque_snake._core"
