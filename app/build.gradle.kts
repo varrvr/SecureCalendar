@@ -24,8 +24,23 @@ android {
             "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    val configuredServerUrl = providers.gradleProperty("secureCalendarServerUrl")
+        .orElse("https://localhost")
+        .get()
+
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+
     buildTypes {
+        debug {
+            manifestPlaceholders["cleartextTraffic"] = "true"
+            buildConfigField("String", "SERVER_BASE_URL", "\"${providers.gradleProperty("secureCalendarDebugServerUrl").orElse("http://10.0.2.2:8000").get()}\"")
+        }
         release {
+            manifestPlaceholders["cleartextTraffic"] = "false"
+            buildConfigField("String", "SERVER_BASE_URL", "\"$configuredServerUrl\"")
             optimization {
                 enable = false
             }
@@ -39,9 +54,6 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
-    buildFeatures {
-        compose = true
-    }
 }
 
 dependencies {

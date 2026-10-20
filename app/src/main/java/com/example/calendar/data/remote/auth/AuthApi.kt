@@ -15,6 +15,11 @@ data class ServerAuthResult(
     val displayName: String
 )
 
+data class ServerLoginChallenge(
+    val loginStateId: String,
+    val credentialResponse: ByteArray
+)
+
 class AuthApiException(val statusCode: Int, val detail: String) : IOException("HTTP $statusCode: $detail")
 
 class AuthApi(
@@ -39,9 +44,7 @@ class AuthApi(
             body = request
         )
 
-        return decode(
-            response.getString("registration_response")
-        )
+        return decode(response.getString("registration_response"))
     }
 
     suspend fun registrationFinish(
@@ -64,7 +67,7 @@ class AuthApi(
     suspend fun loginStart(
         username: String,
         message: ByteArray
-    ): ByteArray {
+    ): ServerLoginChallenge {
         val request = JSONObject().apply {
             put("username", username)
             put("credential_request", encode(message))
@@ -75,17 +78,20 @@ class AuthApi(
             body = request
         )
 
-        return decode(
-            response.getString("credential_response")
+        return ServerLoginChallenge(
+            loginStateId = response.getString("login_state_id"),
+            credentialResponse = decode(response.getString("credential_response"))
         )
     }
 
     suspend fun loginFinish(
         username: String,
+        loginStateId: String,
         message: ByteArray
     ): ServerAuthResult {
         val request = JSONObject().apply {
             put("username", username)
+            put("login_state_id", loginStateId)
             put("credential_finalization", encode(message))
         }
 

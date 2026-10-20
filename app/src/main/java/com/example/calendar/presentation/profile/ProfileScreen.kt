@@ -6,7 +6,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 
 data class ProfileUiState(
@@ -16,17 +18,24 @@ data class ProfileUiState(
     val serverRegistrationStatus: String = "NOT_REGISTERED",
     val serverAuthenticated: Boolean = false,
     val serverConfigured: Boolean = false,
-    val publicKeyFingerprint: String? = null
+    val publicKeyFingerprint: String? = null,
+    val isCreatingKey: Boolean = false,
+    val keyError: String? = null,
+    val isServerAuthLoading: Boolean = false,
+    val serverAuthError: String? = null
 )
 
 @Composable
 fun ProfileScreen(
     state: ProfileUiState,
     onShowQrClick: () -> Unit,
-    onConnectClick: () -> Unit,
+    onConnectClick: (String) -> Unit,
+    onCreateKeyClick: () -> Unit,
     onLogoutClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showPasswordDialog by remember { mutableStateOf(false) }
+    var serverPassword by remember { mutableStateOf("") }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -75,7 +84,7 @@ fun ProfileScreen(
 
                 Text("OPAQUE: ${if (state.serverRegistrationStatus == "REGISTERED") "зарегистрирован" else "не зарегистрирован"}")
                 Text("Серверная авторизация: ${if (state.serverAuthenticated) "выполнена" else "не выполнена"}")
-                Text("Публичный ключ: ${state.publicKeyFingerprint ?: "Криптографический ключ ещё не создан"}")
+                Text("Отпечаток публичного ключа: ${state.publicKeyFingerprint ?: "Криптографический ключ ещё не создан"}")
             }
         }
 
@@ -86,19 +95,39 @@ fun ProfileScreen(
             )
         }
 
+        if (state.publicKeyFingerprint == null) {
+            Button(
+                onClick = onCreateKeyClick,
+                enabled = !state.isCreatingKey,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (state.isCreatingKey) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(if (state.isCreatingKey) "Создаём ключ…" else "Создать ключ Bee2")
+            }
+        }
+        state.keyError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+
         Button(
-            onClick = onConnectClick,
-            enabled = state.serverConfigured,
+            onClick = { showPasswordDialog = true },
+            enabled = state.serverConfigured && !state.isServerAuthLoading,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(if (state.isConnected) "Подключено к серверу" else if (state.serverConfigured) "Подключиться к серверу" else "Сервер не настроен")
+            if (state.isServerAuthLoading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            else Text(if (state.isConnected) "Обновить серверную сессию" else if (state.serverConfigured) "Подключиться к серверу" else "Сервер не настроен")
         }
+        state.serverAuthError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
         OutlinedButton(
             onClick = onShowQrClick,
-            enabled = state.publicKeyFingerprint != null,
+            enabled = false,
             modifier = Modifier.fillMaxWidth()
-        ) { Text("Показать QR-код ключа") }
+        ) { Text("QR-код ключа пока недоступен") }
 
         OutlinedButton(
             onClick = onLogoutClick,
@@ -106,5 +135,50 @@ fun ProfileScreen(
         ) {
             Text("Выйти из аккаунта")
         }
+    }
+
+    if (showPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!state.isServerAuthLoading) {
+                    showPasswordDialog = false
+                    serverPassword = ""
+                }
+            },
+            title = { Text("Подключение к Secure Calendar") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Пароль используется только для OPAQUE и не сохраняется.")
+                    OutlinedTextField(
+                        value = serverPassword,
+                        onValueChange = { serverPassword = it },
+                        label = { Text("Пароль аккаунта") },
+                        singleLine = true,
+                        enabled = !state.isServerAuthLoading,
+                        visualTransformation = PasswordVisualTransformation()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = serverPassword.isNotEmpty() && !state.isServerAuthLoading,
+                    onClick = {
+                        val password = serverPassword
+                        serverPassword = ""
+                        showPasswordDialog = false
+                        onConnectClick(password)
+                    }
+                ) { Text("Продолжить") }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !state.isServerAuthLoading,
+                    onClick = {
+                        serverPassword = ""
+                        showPasswordDialog = false
+                    }
+                ) { Text("Отмена") }
+            }
+        )
     }
 }

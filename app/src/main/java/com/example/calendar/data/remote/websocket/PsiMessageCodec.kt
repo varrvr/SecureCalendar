@@ -19,7 +19,8 @@ object PsiMessageCodec {
             sessionId = json.getString("session_id"),
             type = json.getString("type"),
             recipientId = json.getLong("recipient_id"),
-            payload = Base64.decode(json.getString("payload"), Base64.NO_WRAP)
+            payload = Base64.decode(json.getString("payload"), Base64.NO_WRAP),
+            senderId = json.optLong("sender_id").takeIf { json.has("sender_id") }
         )
     }
 }

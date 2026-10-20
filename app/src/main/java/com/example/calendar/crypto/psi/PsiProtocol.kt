@@ -20,7 +20,14 @@ data class PsiSession(
 }
 
 /** Payload is an opaque protocol message. It must never contain plaintext meeting data. */
-data class PsiMessage(val sessionId: String, val type: String, val recipientId: Long, val payload: ByteArray) {
+data class PsiMessage(
+    val sessionId: String,
+    val type: String,
+    val recipientId: Long,
+    val payload: ByteArray,
+    /** Added by the authenticated server relay on incoming messages. */
+    val senderId: Long? = null
+) {
     init { require(sessionId.isNotBlank() && type.isNotBlank() && recipientId > 0) }
 }
 

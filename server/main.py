@@ -1,8 +1,11 @@
 import base64
+import binascii
+import logging
+import re
 import time
 import uuid
+from dataclasses import dataclass
 from typing import Optional
-from contextlib import closing
 
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -11,6 +14,29 @@ from . import database as db
 from . import opaque_auth
 from .auth import create_token, get_current_user
 from .websocket import manager, router as websocket_router
+
+
+_TOKEN_QUERY = re.compile(r"(?i)([?&]token=)[^&\s\"']+")
+
+
+class _WebSocketTokenLogFilter(logging.Filter):
+    """Uvicorn logs websocket paths from both access and protocol loggers."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name not in {"uvicorn.access", "uvicorn.error"}:
+            return True
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                _TOKEN_QUERY.sub(r"\1[REDACTED]", value) if isinstance(value, str) else value
+                for value in record.args
+            )
+        record.msg = _TOKEN_QUERY.sub(r"\1[REDACTED]", str(record.msg))
+        return True
+
+
+_token_log_filter = _WebSocketTokenLogFilter()
+logging.getLogger("uvicorn.access").addFilter(_token_log_filter)
+logging.getLogger("uvicorn.error").addFilter(_token_log_filter)
 
 app = FastAPI(
     title="Secure Calendar Mediator Server (OPAQUE)",
@@ -23,11 +49,8 @@ app.include_router(websocket_router)
 @app.on_event("startup")
 def on_startup() -> None:
     db.init_db()
-    # Очищаем пользователей при старте, так как server_setup генерируется заново.
-    with closing(db.get_conn()) as conn:
-        conn.execute("DELETE FROM users")
-        conn.commit()
-    opaque_auth.get_server_setup()
+    # Server setup is stable across restarts and is stored with the user DB.
+    opaque_auth.get_server()
 
 
 # ---------- Модели запросов ----------
@@ -51,6 +74,7 @@ class LoginStartRequest(BaseModel):
 
 class LoginFinishRequest(BaseModel):
     username: str
+    login_state_id: str
     credential_finalization: str  # base64
 
 
@@ -92,7 +116,29 @@ def get_session_for_user(session_id: str, current_user: dict) -> dict:
 
 
 # In-memory хранилище server_state для шага /login/finish.
-_login_states: dict[str, object] = {}
+@dataclass
+class _PendingLogin:
+    username: str
+    state: object
+    created_at: float
+
+
+_login_states: dict[str, _PendingLogin] = {}
+_LOGIN_STATE_TTL_SECONDS = 120
+
+
+def _decode_message(value: str) -> bytes:
+    try:
+        return base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="invalid_base64") from exc
+
+
+def _prune_login_states() -> None:
+    cutoff = time.monotonic() - _LOGIN_STATE_TTL_SECONDS
+    for state_id, pending in list(_login_states.items()):
+        if pending.created_at < cutoff:
+            _login_states.pop(state_id, None)
 
 
 # ---------- Health ----------
@@ -106,6 +152,16 @@ async def health() -> dict:
 
 @app.post("/auth/register/start")
 async def register_start(request: RegisterStartRequest) -> dict:
+    raw_request = _decode_message(request.registration_request)
+    try:
+        response_bytes = opaque_auth.registration_start(request.username, raw_request)
+    except Exception as exc:
+        # Don't expose native/parser internals or request contents to clients.
+        raise HTTPException(
+            status_code=400,
+            detail=f"invalid_registration_request:{type(exc).__name__}:{len(raw_request)}",
+        ) from exc
+
     try:
         user = db.create_user_pending(
             username=request.username,
@@ -114,9 +170,6 @@ async def register_start(request: RegisterStartRequest) -> dict:
         )
     except ValueError:
         raise HTTPException(status_code=409, detail="username_already_exists")
-
-    raw_request = base64.b64decode(request.registration_request)
-    response_bytes = opaque_auth.registration_start(request.username, raw_request)
 
     return {
         "user_id": user["id"],
@@ -132,10 +185,14 @@ async def register_finish(request: RegisterFinishRequest) -> dict:
     if user["password_file"] is not None:
         raise HTTPException(status_code=409, detail="already_registered")
 
-    raw_upload = base64.b64decode(request.registration_upload)
-    password_file_bytes = opaque_auth.registration_finish(raw_upload)
+    raw_upload = _decode_message(request.registration_upload)
+    try:
+        password_file_bytes = opaque_auth.registration_finish(raw_upload)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="invalid_registration_upload") from exc
 
-    db.set_password_file(user["id"], password_file_bytes)
+    if not db.set_password_file(user["id"], password_file_bytes):
+        raise HTTPException(status_code=409, detail="already_registered")
     user = db.get_user_by_id(user["id"])
 
     token = create_token(user["id"])
@@ -154,33 +211,47 @@ async def login_start(request: LoginStartRequest) -> dict:
     if user is None or user["password_file"] is None:
         raise HTTPException(status_code=401, detail="invalid_credentials")
 
-    raw_request = base64.b64decode(request.credential_request)
-    response_bytes, server_state = opaque_auth.login_start(
-        request.username,
-        raw_request,
-        user["password_file"],
-    )
+    raw_request = _decode_message(request.credential_request)
+    try:
+        response_bytes, server_state = opaque_auth.login_start(
+            request.username,
+            raw_request,
+            user["password_file"],
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="invalid_credential_request") from exc
 
-    _login_states[request.username] = server_state
+    _prune_login_states()
+    login_state_id = str(uuid.uuid4())
+    _login_states[login_state_id] = _PendingLogin(
+        username=request.username,
+        state=server_state,
+        created_at=time.monotonic(),
+    )
 
     return {
         "user_id": user["id"],
+        "login_state_id": login_state_id,
         "credential_response": base64.b64encode(response_bytes).decode("ascii"),
     }
 
 
 @app.post("/auth/login/finish")
 async def login_finish(request: LoginFinishRequest) -> dict:
-    user = db.get_user_by_username(request.username)
-    if user is None:
-        raise HTTPException(status_code=401, detail="invalid_credentials")
-
-    server_state = _login_states.pop(request.username, None)
-    if server_state is None:
+    _prune_login_states()
+    pending = _login_states.pop(request.login_state_id, None)
+    if pending is None or pending.username != request.username:
         raise HTTPException(status_code=401, detail="login_state_missing_or_expired")
 
-    raw_finalization = base64.b64decode(request.credential_finalization)
-    opaque_auth.login_finish(raw_finalization, server_state)
+    user = db.get_user_by_username(request.username)
+    if user is None or user["password_file"] is None:
+        raise HTTPException(status_code=401, detail="invalid_credentials")
+
+    raw_finalization = _decode_message(request.credential_finalization)
+    try:
+        opaque_auth.login_finish(raw_finalization, pending.state)
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="invalid_credentials") from exc
 
     token = create_token(user["id"])
     return {

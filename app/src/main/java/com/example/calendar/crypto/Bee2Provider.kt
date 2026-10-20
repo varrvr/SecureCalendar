@@ -1,7 +1,7 @@
 
 package com.example.calendar.crypto
 
-object Bee2Provider {
+internal object Bee2Provider {
 
     const val HASH_SIZE = 32
     const val SCALAR_SIZE = 32
@@ -15,33 +15,33 @@ object Bee2Provider {
         System.loadLibrary("bee2bridge")
     }
 
-    external fun beltHash(
+    internal external fun beltHash(
         data: ByteArray
     ): ByteArray
 
-    external fun validateScalar(
+    internal external fun validateScalar(
         scalar: ByteArray
     ): Boolean
 
-    external fun validatePoint(
+    internal external fun validatePoint(
         point: ByteArray
     ): Boolean
 
-    external fun publicFromScalar(
+    internal external fun publicFromScalar(
         scalar: ByteArray
     ): ByteArray
 
-    external fun multiplyPoint(
+    internal external fun multiplyPoint(
         point: ByteArray,
         scalar: ByteArray
     ): ByteArray
 
-    external fun bignSignMessage(
+    internal external fun bignSignMessage(
         message: ByteArray,
         privateKey: ByteArray
     ): ByteArray
 
-    external fun bignVerifyMessage(
+    internal external fun bignVerifyMessage(
         message: ByteArray,
         signature: ByteArray,
         publicKey: ByteArray

@@ -6,15 +6,19 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.example.calendar.data.local.auth.LocalUserDao
 import com.example.calendar.data.local.auth.LocalUserEntity
+import com.example.calendar.data.local.crypto.Bee2KeyEntity
+import com.example.calendar.data.local.crypto.Bee2KeyDao
 import com.example.calendar.data.local.migration.MIGRATION_1_2
 import com.example.calendar.data.local.migration.MIGRATION_2_3
+import com.example.calendar.data.local.migration.MIGRATION_3_4
 
 @Database(
     entities = [
         EventEntity::class,
-        LocalUserEntity::class
+        LocalUserEntity::class,
+        Bee2KeyEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class CalendarDatabase : RoomDatabase() {
@@ -22,6 +26,8 @@ abstract class CalendarDatabase : RoomDatabase() {
     abstract fun eventDao(): EventDao
 
     abstract fun localUserDao(): LocalUserDao
+
+    abstract fun bee2KeyDao(): Bee2KeyDao
 
     companion object {
 
@@ -37,6 +43,7 @@ abstract class CalendarDatabase : RoomDatabase() {
                 )
                     .addMigrations(MIGRATION_1_2)
                     .addMigrations(MIGRATION_2_3)
+                    .addMigrations(MIGRATION_3_4)
                     .build()
                     .also { instance = it }
             }

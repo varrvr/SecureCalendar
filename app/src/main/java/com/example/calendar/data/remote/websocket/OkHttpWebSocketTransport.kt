@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets
 
 /** Raw text transport. Message semantics remain the responsibility of the negotiated protocol. */
 class OkHttpWebSocketTransport(
+    private val allowInsecureForDebug: Boolean = false,
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
@@ -34,12 +35,15 @@ class OkHttpWebSocketTransport(
         disconnect()
         val input = runCatching { URI(webSocketBaseUrl) }.getOrNull()
             ?: throw IllegalArgumentException("Invalid WebSocket URL")
-        require(input.scheme.equals("wss", ignoreCase = true)) { "WebSocket requires WSS" }
+        val secure = input.scheme.equals("wss", ignoreCase = true)
+        val insecureDebug = allowInsecureForDebug && input.scheme.equals("ws", ignoreCase = true)
+        require(secure || insecureDebug) { "WebSocket requires WSS" }
         require(accessToken.isNotBlank())
         require(!input.host.isNullOrBlank()) { "Invalid WebSocket URL" }
         val tokenParameter = "token=" + URLEncoder.encode(accessToken, StandardCharsets.UTF_8.name())
         val query = listOfNotNull(input.rawQuery?.takeIf(String::isNotBlank), tokenParameter).joinToString("&")
-        val url = URI("wss", input.userInfo, input.host, input.port, input.rawPath.ifBlank { "/" }, query, null).toASCIIString()
+        val scheme = if (secure) "wss" else "ws"
+        val url = URI(scheme, input.userInfo, input.host, input.port, input.rawPath.ifBlank { "/" }, query, null).toASCIIString()
         _state.value = WebSocketState.CONNECTING
         socket = client.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: okhttp3.Response) { _state.value = WebSocketState.CONNECTED }

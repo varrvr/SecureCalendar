@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.calendar.data.local.CalendarDatabase
 import com.example.calendar.data.local.migration.MIGRATION_1_2
 import com.example.calendar.data.local.migration.MIGRATION_2_3
+import com.example.calendar.data.local.migration.MIGRATION_3_4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -15,7 +16,7 @@ import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class RoomMigrationTest {
-    @Test fun versionOneEventsSurviveBothMigrations() {
+    @Test fun versionOneEventsSurviveAllMigrations() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val name = "migration-${System.nanoTime()}.db"
         val file = context.getDatabasePath(name)
@@ -28,7 +29,7 @@ class RoomMigrationTest {
             db.version = 1
         }
         val database = Room.databaseBuilder(context, CalendarDatabase::class.java, name)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
         try {
             val sql = database.openHelper.writableDatabase
@@ -37,7 +38,10 @@ class RoomMigrationTest {
                 assertEquals("old meeting", cursor.getString(0))
                 assertEquals(0L, cursor.getLong(1))
             }
-            assertEquals(3, sql.query("PRAGMA user_version").use { cursor -> cursor.moveToFirst(); cursor.getInt(0) })
+            assertEquals(4, sql.query("PRAGMA user_version").use { cursor -> cursor.moveToFirst(); cursor.getInt(0) })
+            sql.query("PRAGMA table_info(bee2_keys)").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+            }
         } finally {
             database.close()
             File(file.path + "-wal").delete()

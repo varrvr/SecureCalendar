@@ -11,7 +11,15 @@ DB_PATH = os.getenv(
 
 
 def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    parent = os.path.dirname(os.path.abspath(DB_PATH))
+    os.makedirs(parent, exist_ok=True)
+    previous_umask = os.umask(0o077)
+    try:
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    finally:
+        os.umask(previous_umask)
+    if os.path.exists(DB_PATH):
+        os.chmod(DB_PATH, 0o600)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -51,6 +59,11 @@ def init_db() -> None:
                 FOREIGN KEY(responder_id) REFERENCES users(id)
             );
 
+            CREATE TABLE IF NOT EXISTS server_settings (
+                setting_key TEXT PRIMARY KEY NOT NULL,
+                setting_value BLOB NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_users_username
                 ON users(username);
 
@@ -62,6 +75,32 @@ def init_db() -> None:
             """
         )
         conn.commit()
+
+
+def get_setting(key: str) -> Optional[bytes]:
+    with closing(get_conn()) as conn:
+        row = conn.execute(
+            "SELECT setting_value FROM server_settings WHERE setting_key = ?",
+            (key,),
+        ).fetchone()
+        return bytes(row[0]) if row else None
+
+
+def set_setting_if_absent(key: str, value: bytes) -> bytes:
+    """Atomically keep the first server secret generated for this database."""
+    with closing(get_conn()) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO server_settings(setting_key, setting_value) VALUES (?, ?)",
+            (key, sqlite3.Binary(value)),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT setting_value FROM server_settings WHERE setting_key = ?",
+            (key,),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("failed_to_persist_server_setting")
+        return bytes(row[0])
 
 
 def create_user_pending(
@@ -92,6 +131,14 @@ def create_user_pending(
             conn.commit()
             user_id = cur.lastrowid
     except sqlite3.IntegrityError as exc:
+        existing = get_user_by_username(username)
+        if (
+            existing is not None
+            and existing["password_file"] is None
+            and existing["public_key"] == public_key
+            and existing["display_name"] == display_name
+        ):
+            return existing
         raise ValueError("username_taken") from exc
 
     user = get_user_by_id(user_id)
@@ -100,13 +147,14 @@ def create_user_pending(
     return user
 
 
-def set_password_file(user_id: int, password_file: bytes) -> None:
+def set_password_file(user_id: int, password_file: bytes) -> bool:
     with closing(get_conn()) as conn:
-        conn.execute(
-            "UPDATE users SET password_file = ? WHERE id = ?",
+        cursor = conn.execute(
+            "UPDATE users SET password_file = ? WHERE id = ? AND password_file IS NULL",
             (password_file, user_id),
         )
         conn.commit()
+        return cursor.rowcount == 1
 
 
 def get_user_by_id(user_id: int) -> Optional[dict]:

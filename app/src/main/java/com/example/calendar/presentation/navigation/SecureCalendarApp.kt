@@ -21,6 +21,7 @@ import com.example.calendar.presentation.calendar.CalendarViewModel
 import com.example.calendar.presentation.comparison.*
 import com.example.calendar.presentation.editor.EventEditorScreen
 import com.example.calendar.presentation.profile.*
+import com.example.calendar.presentation.profile.ProfileViewModel
 import java.time.LocalDate
 
 
@@ -39,10 +40,19 @@ fun SecureCalendarApp(
     ),
     authViewModel: LocalAuthViewModel = viewModel(
         factory = AppViewModelFactory(LocalContext.current.applicationContext.let { it as SecureCalendarApplication }.container)
+    ),
+    profileViewModel: ProfileViewModel = viewModel(
+        factory = AppViewModelFactory(LocalContext.current.applicationContext.let { it as SecureCalendarApplication }.container)
+    ),
+    comparisonViewModel: ComparisonViewModel = viewModel(
+        factory = AppViewModelFactory(LocalContext.current.applicationContext.let { it as SecureCalendarApplication }.container)
     )
 ) {
     val application = LocalContext.current.applicationContext as SecureCalendarApplication
     val authOperation by authViewModel.state.collectAsState()
+    val profileKeyState by profileViewModel.keyState.collectAsState()
+    val profileServerState by profileViewModel.serverState.collectAsState()
+    val comparison by comparisonViewModel.state.collectAsState()
     var page by remember {
         mutableStateOf(AppPage.LOGIN)
     }
@@ -59,21 +69,18 @@ fun SecureCalendarApp(
         mutableStateOf(ProfileUiState())
     }
 
-    var comparison by remember {
-        mutableStateOf(
-            ComparisonUiState()
-        )
-    }
-
     val events by calendarViewModel.events.collectAsState()
     val editor = calendarViewModel.editorState
 
     LaunchedEffect(authOperation.account) {
         authOperation.account?.let { account ->
+            profileViewModel.selectAccount(account.id, account.serverRegistrationStatus)
+            comparisonViewModel.selectAccount(account.id)
             profileState = ProfileUiState(
                 username = account.displayName,
                 login = account.username,
-                serverRegistrationStatus = account.serverRegistrationStatus.name
+                serverRegistrationStatus = account.serverRegistrationStatus.name,
+                serverConfigured = true
             )
             loginState = LoginUiState()
             registerState = RegisterUiState()
@@ -298,46 +305,55 @@ fun SecureCalendarApp(
                     ComparisonScreen(
                         state = comparison,
                         onUserSelected = {
-                            comparison = comparison.copy(
-                                selectedUser = it,
-                                status = ComparisonStatus.INITIAL
-                            )
+                            comparisonViewModel.selectUser(it)
                         },
                         onPeriodStartChanged = {
-                            comparison = comparison.copy(
-                                periodStart = it
-                            )
+                            comparisonViewModel.setPeriodStart(it)
                         },
                         onPeriodEndChanged = {
-                            comparison = comparison.copy(
-                                periodEnd = it
-                            )
+                            comparisonViewModel.setPeriodEnd(it)
                         },
-                        onRequestClick = {
-                            comparison = comparison.copy(
-                                status = ComparisonStatus.ERROR,
-                                error = "Защищённое сравнение пока недоступно: нет серверной сессии и Bee2 PSI-движка"
-                            )
-                        },
-                        onRetryClick = {
-                            comparison = comparison.copy(
-                                status = ComparisonStatus.INITIAL
-                            )
-                        },
+                        onSearchClick = comparisonViewModel::searchUsers,
+                        onRequestClick = comparisonViewModel::requestComparison,
+                        onCancelRequest = comparisonViewModel::cancelRequest,
+                        onAcceptRequest = comparisonViewModel::acceptRequest,
+                        onRejectRequest = comparisonViewModel::rejectRequest,
+                        onRetryClick = comparisonViewModel::retry,
                         modifier = modifier
                     )
                 }
 
                 AppPage.PROFILE -> {
                     ProfileScreen(
-                        state = profileState,
+                        state = profileState.copy(
+                            isConnected = profileServerState.connected,
+                            serverRegistrationStatus = profileServerState.registrationStatus.name,
+                            serverAuthenticated = profileServerState.authenticated,
+                            publicKeyFingerprint = profileKeyState.fingerprint ?: profileState.publicKeyFingerprint,
+                            isCreatingKey = profileKeyState.isCreating,
+                            keyError = profileKeyState.error,
+                            isServerAuthLoading = profileServerState.isLoading,
+                            serverAuthError = profileServerState.error
+                        ),
                         onShowQrClick = {},
-                        onConnectClick = {},
+                        onConnectClick = { password ->
+                            authOperation.account?.let { account ->
+                                profileViewModel.connectToServer(
+                                    ownerId = account.id,
+                                    username = account.username,
+                                    displayName = account.displayName,
+                                    password = password
+                                )
+                            }
+                        },
+                        onCreateKeyClick = profileViewModel::createKey,
                         onLogoutClick = {
                             application.container.sessionRepository.clearSession()
+                            comparisonViewModel.selectAccount(null)
                             loginState = LoginUiState()
                             registerState = RegisterUiState()
                             profileState = ProfileUiState()
+                            profileViewModel.clearAccount()
                             calendarViewModel.closeEditor()
                             page = AppPage.LOGIN
                         },

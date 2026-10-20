@@ -15,6 +15,9 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+data class ComparisonUserUi(val id: Long, val username: String, val displayName: String)
+data class IncomingComparisonUi(val sessionId: String, val username: String, val periodStart: Long?, val periodEnd: Long?)
+
 enum class ComparisonStatus {
     INITIAL,
     WAITING,
@@ -31,7 +34,14 @@ data class ComparisonUiState(
     val periodEnd: LocalDate = LocalDate.now().plusDays(7),
     val status: ComparisonStatus = ComparisonStatus.INITIAL,
     val intersections: List<TimeInterval> = emptyList(),
-    val error: String? = null
+    val error: String? = null,
+    val searchResults: List<ComparisonUserUi> = emptyList(),
+    val selectedUserId: Long? = null,
+    val incomingRequests: List<IncomingComparisonUi> = emptyList(),
+    val currentSessionId: String? = null,
+    val isSearching: Boolean = false,
+    val isConnected: Boolean = false,
+    val isSubmitting: Boolean = false
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,7 +51,11 @@ fun ComparisonScreen(
     onUserSelected: (String) -> Unit,
     onPeriodStartChanged: (LocalDate) -> Unit,
     onPeriodEndChanged: (LocalDate) -> Unit,
+    onSearchClick: () -> Unit,
     onRequestClick: () -> Unit,
+    onCancelRequest: () -> Unit,
+    onAcceptRequest: (String) -> Unit,
+    onRejectRequest: (String) -> Unit,
     onRetryClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -83,6 +97,49 @@ fun ComparisonScreen(
         )
 
         OutlinedButton(
+            onClick = onSearchClick,
+            enabled = state.isConnected && !state.isSearching && !state.selectedUser.isNullOrBlank(),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            if (state.isSearching) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            else Text("Найти пользователя")
+        }
+        state.searchResults.forEach { peer ->
+            OutlinedButton(
+                onClick = { onUserSelected(peer.username) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("${peer.displayName} (@${peer.username})")
+            }
+        }
+
+        Text(
+            if (state.isConnected) "Сервер подключён" else "Подключитесь к серверу в профиле для поиска пользователей.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        if (state.incomingRequests.isNotEmpty()) {
+            Text("Входящие запросы", style = MaterialTheme.typography.titleMedium)
+            state.incomingRequests.forEach { invite ->
+                ElevatedCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Запрос от ${invite.username} · ${invite.sessionId.take(8)}")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { onAcceptRequest(invite.sessionId) }) { Text("Принять") }
+                            OutlinedButton(onClick = { onRejectRequest(invite.sessionId) }) { Text("Отклонить") }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (state.status == ComparisonStatus.WAITING) {
+            OutlinedButton(onClick = onCancelRequest, modifier = Modifier.fillMaxWidth()) {
+                Text("Отменить запрос")
+            }
+        }
+
+        OutlinedButton(
             onClick = { selectStart = true },
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -109,16 +166,15 @@ fun ComparisonScreen(
 
         Button(
             onClick = onRequestClick,
-            enabled = state.selectedUser != null &&
+            enabled = state.selectedUserId != null && state.isConnected &&
                     !state.periodEnd.isBefore(state.periodStart) &&
-                    state.status != ComparisonStatus.PROCESSING &&
+                    !state.isSubmitting && state.status != ComparisonStatus.PROCESSING &&
                     state.status != ComparisonStatus.WAITING,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Запросить сравнение")
+            if (state.isSubmitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            else Text("Запросить сравнение")
         }
-
-        Text("Поиск и защищённый обмен требуют серверной сессии и доступного PSI-модуля.", color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         when (state.status) {
             ComparisonStatus.INITIAL -> {

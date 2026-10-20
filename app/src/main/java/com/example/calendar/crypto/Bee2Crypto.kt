@@ -3,17 +3,21 @@ package com.example.calendar.crypto
 
 import java.security.SecureRandom
 
-data class BignKeyPair(
+class BignKeyPair(
     val privateKey: ByteArray,
     val publicKey: ByteArray
-)
+) {
+    override fun toString(): String = "BignKeyPair(privateKey=<redacted>, publicKey=<${publicKey.size} bytes>)"
+}
 
 class Bee2Crypto {
 
     private val random = SecureRandom()
 
     fun hash(data: ByteArray): ByteArray {
-        return Bee2Provider.beltHash(data)
+        return Bee2Provider.beltHash(data).also {
+            check(it.size == Bee2Provider.HASH_SIZE) { "Unexpected BELT hash length" }
+        }
     }
 
     fun hash(text: String): ByteArray {
@@ -79,7 +83,12 @@ class Bee2Crypto {
             "Invalid BIGN scalar"
         }
 
-        return Bee2Provider.publicFromScalar(scalar)
+        val output = Bee2Provider.publicFromScalar(scalar)
+        if (output.size != Bee2Provider.POINT_SIZE || !validatePoint(output)) {
+            output.fill(0)
+            error("Bee2 returned an invalid public key")
+        }
+        return output
     }
 
     fun multiplyPoint(
@@ -94,10 +103,15 @@ class Bee2Crypto {
             "Invalid BIGN point"
         }
 
-        return Bee2Provider.multiplyPoint(
+        val output = Bee2Provider.multiplyPoint(
             point,
             scalar
         )
+        if (output.size != Bee2Provider.POINT_SIZE || !validatePoint(output)) {
+            output.fill(0)
+            error("Bee2 returned an invalid multiplied point")
+        }
+        return output
     }
 
     fun sign(
@@ -108,10 +122,15 @@ class Bee2Crypto {
             "Invalid signing private key"
         }
 
-        return Bee2Provider.bignSignMessage(
+        val signature = Bee2Provider.bignSignMessage(
             message,
             privateKey
         )
+        if (signature.size != Bee2Provider.SIGNATURE_SIZE) {
+            signature.fill(0)
+            error("Bee2 returned an invalid signature length")
+        }
+        return signature
     }
 
     fun verify(

@@ -2,6 +2,7 @@
 package com.example.calendar.crypto
 
 import java.time.Instant
+import com.example.calendar.domain.model.TimeInterval
 
 object SlotConverter {
 
@@ -40,6 +41,22 @@ object SlotConverter {
         }
 
         return (firstSlot..lastSlot).toSet()
+    }
+
+    /** Clips intervals to the selected UTC period, deduplicates slots, and returns canonical order. */
+    fun toSlots(
+        intervals: Iterable<TimeInterval>,
+        period: TimeInterval
+    ): List<Long> {
+        val slots = sortedSetOf<Long>()
+        intervals.forEach { interval ->
+            val clippedStart = maxOf(interval.start, period.start)
+            val clippedEnd = minOf(interval.end, period.end)
+            if (clippedStart.isBefore(clippedEnd)) {
+                slots += toSlots(clippedStart, clippedEnd)
+            }
+        }
+        return slots.toList()
     }
 
     fun toInstant(slot: Long): Instant {

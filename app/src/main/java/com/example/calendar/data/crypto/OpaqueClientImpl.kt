@@ -7,7 +7,6 @@ import se.digg.opaque_ke_uniffi.clientLoginFinish
 
 class OpaqueClientImpl(
     private val context: ByteArray,
-    private val clientIdentifier: ByteArray,
     private val serverIdentifier: ByteArray
 ) : OpaqueClient {
 
@@ -24,6 +23,7 @@ class OpaqueClientImpl(
     }
 
     override fun registrationFinish(
+        username: String,
         password: ByteArray,
         state: ByteArray,
         serverResponse: ByteArray
@@ -33,11 +33,15 @@ class OpaqueClientImpl(
             password = password,
             clientRegistration = state,
             registrationResponse = serverResponse,
-            clientIdentifier = clientIdentifier,
+            clientIdentifier = username.trim().lowercase().toByteArray(Charsets.UTF_8),
             serverIdentifier = serverIdentifier
         )
 
-        return result.registrationUpload
+        return try {
+            result.registrationUpload.copyOf()
+        } finally {
+            result.exportKey.fill(0)
+        }
     }
 
     override fun loginStart(
@@ -53,6 +57,7 @@ class OpaqueClientImpl(
     }
 
     override fun loginFinish(
+        username: String,
         password: ByteArray,
         state: ByteArray,
         serverResponse: ByteArray
@@ -63,10 +68,15 @@ class OpaqueClientImpl(
             clientRegistration = state,
             password = password,
             context = context,
-            clientIdentifier = clientIdentifier,
+            clientIdentifier = username.trim().lowercase().toByteArray(Charsets.UTF_8),
             serverIdentifier = serverIdentifier
         )
 
-        return result.credentialFinalization
+        return try {
+            result.credentialFinalization.copyOf()
+        } finally {
+            result.sessionKey.fill(0)
+            result.exportKey.fill(0)
+        }
     }
 }

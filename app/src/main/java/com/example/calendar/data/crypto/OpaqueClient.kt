@@ -12,6 +12,7 @@ interface OpaqueClient {
     ): OpaqueStartResult
 
     fun registrationFinish(
+        username: String,
         password: ByteArray,
         state: ByteArray,
         serverResponse: ByteArray
@@ -22,6 +23,7 @@ interface OpaqueClient {
     ): OpaqueStartResult
 
     fun loginFinish(
+        username: String,
         password: ByteArray,
         state: ByteArray,
         serverResponse: ByteArray
