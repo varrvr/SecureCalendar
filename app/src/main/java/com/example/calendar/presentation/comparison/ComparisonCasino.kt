@@ -17,6 +17,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import com.example.calendar.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -44,6 +46,7 @@ internal fun ComparisonCasino(
     enabled: Boolean,
     onDateSelected: (LocalDate) -> Unit
 ) {
+    val context = LocalContext.current
     var time by rememberSaveable { mutableStateOf("09:00") }
     var day by rememberSaveable(date) { mutableStateOf(date.dayOfMonth.toString()) }
     var month by rememberSaveable(date) { mutableStateOf(date.monthValue.toString()) }
@@ -65,10 +68,10 @@ internal fun ComparisonCasino(
             require(time.substring(0, 2).toInt() in 0..23 && time.substring(3).toInt() in 0..59)
             LocalTime.parse(time, DateTimeFormatter.ofPattern("HH:mm"))
         } catch (_: DateTimeException) {
-            error = "Проверьте дату и время (ЧЧ:ММ)"
+            error = context.getString(R.string.comparison_machine_1)
             return@launchMachine
         } catch (_: IllegalArgumentException) {
-            error = "Введите существующую дату и время в формате ЧЧ:ММ"
+            error = context.getString(R.string.comparison_machine_2)
             return@launchMachine
         }
         error = null
@@ -104,13 +107,13 @@ internal fun ComparisonCasino(
             .border(2.dp, CabinetGreen, RoundedCornerShape(24.dp)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Календарный автомат", color = CabinetGreen,
+        Text(context.getString(R.string.comparison_machine_3), color = CabinetGreen,
             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text("Введите дату выбранной границы и опустите рычаг", color = CabinetGreen)
+        Text(context.getString(R.string.comparison_machine_4), color = CabinetGreen)
         // Keep the four input fields readable on narrow screens and with large fonts.
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Время" to time, "День" to day, "Месяц" to month, "Год" to year)
+            listOf(context.getString(R.string.comparison_machine_5) to time, context.getString(R.string.comparison_machine_6) to day, context.getString(R.string.comparison_machine_7) to month, context.getString(R.string.comparison_machine_8) to year)
                 .forEachIndexed { index, (label, value) ->
                     OutlinedTextField(
                         value = value,
@@ -147,7 +150,7 @@ internal fun ComparisonCasino(
                         repeat(2) { column ->
                             val index = row * 2 + column
                             val value = when {
-                                completed > index -> "Готово"
+                                completed > index -> context.getString(R.string.comparison_machine_9)
                                 running -> when (index) {
                                     0 -> "%02d:%02d".format((tick * 7) % 24, (tick * 13) % 60)
                                     1 -> ((tick * 7) % 31 + 1).toString().padStart(2, '0')
@@ -157,7 +160,7 @@ internal fun ComparisonCasino(
                                 else -> listOf(time, day, month, year)[index]
                             }
                             Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(listOf("Время", "День", "Месяц", "Год")[index], color = CabinetGreen,
+                                Text(listOf(context.getString(R.string.comparison_machine_5), context.getString(R.string.comparison_machine_6), context.getString(R.string.comparison_machine_7), context.getString(R.string.comparison_machine_8))[index], color = CabinetGreen,
                                     style = MaterialTheme.typography.labelSmall)
                                 Box(Modifier.fillMaxWidth().height(64.dp)
                                     .clip(RoundedCornerShape(10.dp))
@@ -185,8 +188,8 @@ internal fun ComparisonCasino(
             var drag by remember { mutableStateOf(0f) }
             Canvas(Modifier.width(44.dp).height(168.dp)
                 .semantics {
-                    contentDescription = "Рычаг автомата. Потяните вниз, чтобы запустить"
-                    onClick(label = "Опустить рычаг") { launchMachine(); true }
+                    contentDescription = context.getString(R.string.comparison_machine_10)
+                    onClick(label = context.getString(R.string.comparison_machine_11)) { launchMachine(); true }
                 }
                 .pointerInput(active) {
                     detectVerticalDragGestures(
@@ -208,13 +211,13 @@ internal fun ComparisonCasino(
         }
         Button(onClick = launchMachine, enabled = active, modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(containerColor = CabinetGreen, contentColor = CabinetLime)) {
-            Text(if (running) "Барабаны вращаются…" else "Опустить рычаг")
+            Text(if (running) context.getString(R.string.comparison_machine_12) else context.getString(R.string.comparison_machine_11))
         }
         if (error != null) Text(error.orEmpty(), color = MaterialTheme.colorScheme.error)
-        Text("Время используется в анимации; период сравнения задаётся датами.",
+        Text(context.getString(R.string.comparison_machine_13),
             color = CabinetGreen, style = MaterialTheme.typography.bodySmall)
-        Text(if (completed == 4 && !running) "Готово. Дата периода установлена."
-            else "Анимация подготовки. Сравнение запускается кнопкой ниже.",
+        Text(if (completed == 4 && !running) context.getString(R.string.comparison_machine_14)
+            else context.getString(R.string.comparison_machine_15),
             color = CabinetGreen, style = MaterialTheme.typography.bodySmall)
     }
 }

@@ -472,7 +472,7 @@ async def cancel_session(
             "type": "session_cancelled",
             "session_id": session_id,
             "sender_id": current_user["id"],
-            "recipient_id": session["responder_id"],
+            "recipient_id": session["responder_id"] if current_user["id"] == session["initiator_id"] else session["initiator_id"],
             "payload": {},
             "server_ts": int(time.time() * 1000),
         },

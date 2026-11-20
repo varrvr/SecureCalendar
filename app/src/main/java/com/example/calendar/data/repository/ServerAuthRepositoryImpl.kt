@@ -194,10 +194,12 @@ class ServerAuthRepositoryImpl(
         check(activeLocalOwner == null || activeLocalOwner.invoke() == ownerId) { "Local account changed during authentication" }
         Log.i(tag, "Installing authenticated server session; localOwnerId=$ownerId; token omitted")
         localUsers?.updateServerRegistrationStatus(ownerId, "REGISTERED")
-        serverSessionManager.install(ownerId, result.accessToken, result.userId, result.expiresAtMillis, generation)
-        val transport = webSocketTransport ?: return
-        val url = webSocketUrl?.invoke() ?: return
-        Log.i(tag, "Opening authenticated WebSocket; endpoint=$url; token omitted")
-        transport.connect(url, result.accessToken)
+        synchronized(serverSessionManager) {
+            check(activeLocalOwner == null || activeLocalOwner.invoke() == ownerId)
+            serverSessionManager.install(ownerId, result.accessToken, result.userId, result.expiresAtMillis, generation)
+            val transport = webSocketTransport
+            val url = webSocketUrl?.invoke()
+            if (transport != null && url != null) transport.connect(url, result.accessToken)
+        }
     }
 }

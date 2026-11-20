@@ -14,7 +14,7 @@
 3. **Криптографические ограничения**: Bee2 JNI предоставляет отдельные BIGN примитивы, но Android модуль ещё не реализует согласованный ECDH-PSI протокол, Hash-to-Curve для выбранной Bee2 группы или подпись транскрипта PSI.
 4. **Приватность календаря**: HTTP/WebSocket слой не отправляет события или интервалы. До реализации PSI сравнение не выполняется.
 
-Сервер и Android e2e настройка описаны в [server/README.md](server/README.md). Текущие криптографические ограничения — в `docs/security-limitations.md` и `docs/psi-protocol.md`.
+Подробный запуск сервера и Android: [docs/server-setup.md](docs/server-setup.md). Результаты интеграции и точные блокеры PSI: [docs/integration-report.md](docs/integration-report.md). Краткая настройка: [server/README.md](server/README.md). Текущие криптографические ограничения — в `docs/security-limitations.md` и `docs/psi-protocol.md`.
 
 ---
 

@@ -1,5 +1,6 @@
 package com.example.calendar.presentation.profile
 
+import com.example.calendar.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.calendar.domain.repository.CryptoKeyRepository
@@ -25,7 +26,8 @@ class ProfileViewModel(
     private val serverAuth: ServerAuthRepositoryImpl,
     private val serverSession: ServerSessionManager,
     private val webSocket: WebSocketTransport,
-    private val serverEndpointSettings: ServerEndpointSettings
+    private val serverEndpointSettings: ServerEndpointSettings,
+    private val message: (Int) -> String
 ) : ViewModel() {
     private companion object {
         const val TAG = "SecureCalendar.Profile"
@@ -97,10 +99,10 @@ class ProfileViewModel(
             Log.i(TAG, "Server address saved; previous in-memory server session cleared")
         } catch (failure: IllegalArgumentException) {
             Log.w(TAG, "Invalid server address; ${failure.javaClass.simpleName}: ${failure.message}")
-            _serverState.value = _serverState.value.copy(error = failure.message ?: "Некорректный адрес сервера")
+            _serverState.value = _serverState.value.copy(error = message(R.string.profile_bad_address))
         } catch (failure: Exception) {
             Log.e(TAG, "Could not save server address; ${failure.javaClass.simpleName}", failure)
-            _serverState.value = _serverState.value.copy(error = "Не удалось сохранить адрес сервера")
+            _serverState.value = _serverState.value.copy(error = message(R.string.profile_save_failed))
         }
     }
 
@@ -126,7 +128,7 @@ class ProfileViewModel(
                     publicKey = cryptoKeys.publicKey(ownerId)
                 }
                 if (publicKey == null && _serverState.value.registrationStatus != ServerRegistrationStatus.REGISTERED) {
-                    error("Криптографический модуль Bee2 недоступен")
+                    error(message(R.string.profile_bee2_failed))
                 }
                 Log.d(TAG, "Public key found; bytes=${publicKey?.size ?: 0}; starting server OPAQUE flow")
                 val encodedPublicKey = publicKey?.let { Base64.encodeToString(it, Base64.NO_WRAP) }.orEmpty()
@@ -156,7 +158,15 @@ class ProfileViewModel(
                     _serverState.value = _serverState.value.copy(
                         isLoading = false,
                         authenticated = false,
-                        error = failure.message?.take(180) ?: "Не удалось подключиться к серверу"
+                        error = message(when (failure) {
+                            is com.example.calendar.data.remote.auth.AuthApiException -> when (failure.statusCode) {
+                                401 -> R.string.profile_bad_credentials
+                                409 -> R.string.profile_auth_conflict
+                                else -> R.string.profile_auth_failed
+                            }
+                            is java.io.IOException -> R.string.comparison_connection_lost
+                            else -> R.string.profile_auth_failed
+                        })
                     )
                 }
             } catch (failure: LinkageError) {
@@ -165,7 +175,7 @@ class ProfileViewModel(
                     _serverState.value = _serverState.value.copy(
                         isLoading = false,
                         authenticated = false,
-                        error = "Bee2 не загрузилась (${failure.javaClass.simpleName}). См. Logcat: SecureCalendar.Bee2"
+                        error = message(R.string.profile_bee2_failed)
                     )
                 }
             } finally {
@@ -191,12 +201,12 @@ class ProfileViewModel(
             } catch (failure: Exception) {
                 Log.e(TAG, "Bee2 key creation failed; ownerId=$ownerId; error=${failure.javaClass.simpleName}: ${failure.message}", failure)
                 if (_keyState.value.ownerId == ownerId) {
-                    _keyState.value = _keyState.value.copy(error = failure.message ?: "Не удалось создать ключ Bee2")
+                    _keyState.value = _keyState.value.copy(error = message(R.string.profile_key_failed))
                 }
             } catch (unsupported: LinkageError) {
                 Log.e(TAG, "Bee2 native library unavailable; ownerId=$ownerId; supportedAbis=${Build.SUPPORTED_ABIS.joinToString()}; ${unsupported.javaClass.simpleName}: ${unsupported.message}", unsupported)
                 if (_keyState.value.ownerId == ownerId) {
-                    _keyState.value = _keyState.value.copy(error = "Bee2 не загрузилась (${unsupported.javaClass.simpleName}). См. Logcat: SecureCalendar.Bee2")
+                    _keyState.value = _keyState.value.copy(error = message(R.string.profile_bee2_failed))
                 }
             } finally {
                 if (_keyState.value.ownerId == ownerId) {

@@ -48,7 +48,7 @@ class ComparisonViewModel(private val repository: ComparisonRepository) : ViewMo
         if (id == accountId) return
         generation++; accountId = id
         operation?.cancel(); refresh?.cancel(); timeout?.cancel()
-        _state.value = ComparisonUiState(isConnected = false)
+        _state.value = ComparisonUiState(isConnected = id != null && _state.value.isConnected)
         refreshIncoming()
     }
     private fun busy() = operation?.isActive == true || _state.value.status in

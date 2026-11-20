@@ -21,3 +21,10 @@ Before implementing a real engine, both developers must agree and record:
 ## Current Android boundary
 
 `PsiCrypto` delegates hash-to-curve to an explicitly injected implementation. No implementation is supplied. It does not fall back to `hash(element) * G`. `SlotConverter` prepares canonical sorted UTC slot identifiers locally; callers must not serialize that set directly to the server. `PsiUnavailableException` remains the expected behavior until an engine is reviewed and tested.
+
+
+## Integration update 2026-11-20
+
+Android now reconciles persisted HTTP invitation/session states with WS triggers, enters PSI preparation only after server acceptance, constructs a guarded session with **server** participant IDs and fails closed through PsiUnavailableException. No local slot set is serialized at this boundary. The real two-account Compose test confirms both parties display crypto unavailable after acceptance. The relay accepts only psi_* envelopes with nonempty valid Base64, overwrites sender_id from auth, rejects wrong session/recipient/status and exact replay; server control events cannot be sent via relay. Replay fingerprints are routing metadata, not cryptographic transcript verification.
+
+The current UI explicitly describes overlap of public **busy** 15-minute UTC slots; private events are excluded. Common free intervals are a different product contract and have not been substituted. As no engine exists, neither kind of result is currently produced. See integration-report.md for the exact remaining native/protocol contracts.

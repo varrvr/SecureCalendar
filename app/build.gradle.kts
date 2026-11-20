@@ -1,3 +1,5 @@
+import java.net.URI
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -25,7 +27,7 @@ android {
     }
 
     val configuredServerUrl = providers.gradleProperty("secureCalendarServerUrl")
-        .orElse("https://localhost")
+        .orElse("")
         .get()
 
     buildFeatures {
@@ -74,6 +76,7 @@ dependencies {
     implementation(libs.okhttp)
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)
+    androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(
@@ -91,4 +94,35 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation(files("libs/opaque_ke_uniffi-release.aar"))
     implementation("net.java.dev.jna:jna:5.14.0@aar")
+}
+
+// Reject misplaced ELF artifacts before they can ship in an APK.
+val verifyBee2Abi = tasks.register("verifyBee2Abi") {
+    inputs.files(fileTree("src/main/jniLibs") { include("**/libbee2bridge.so") })
+    doLast {
+        inputs.files.files.forEach { library ->
+            val header = library.inputStream().use { it.readNBytes(20) }
+            val machine = (header[18].toInt() and 255) or ((header[19].toInt() and 255) shl 8)
+            val valid = when (library.parentFile.name) {
+                "arm64-v8a" -> header[4].toInt() == 2 && machine == 183
+                "armeabi-v7a" -> header[4].toInt() == 1 && machine == 40
+                else -> false
+            }
+            check(header.take(4) == listOf<Byte>(0x7f, 0x45, 0x4c, 0x46) && valid) {
+                "Bee2 ELF ABI does not match its jniLibs directory: ${library.name}"
+            }
+        }
+    }
+}
+tasks.named("preBuild").configure { dependsOn(verifyBee2Abi) }
+
+val releaseEndpoint = providers.gradleProperty("secureCalendarServerUrl").orElse("").get()
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    doFirst {
+        val uri = URI(releaseEndpoint)
+        require(uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null &&
+            uri.host !in setOf("localhost", "127.0.0.1", "::1")) {
+            "Release requires -PsecureCalendarServerUrl=https://your-real-server"
+        }
+    }
 }

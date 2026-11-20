@@ -1,5 +1,10 @@
 # Bee2 / ECDH-PSI technical audit
 
+## Update 2026-11-20
+
+See [integration-report.md](integration-report.md) for the executed current results: 15 JVM, 14 Android arm64 instrumentation and 21 Python tests pass. The current emulator is API 37 arm64. A misplaced ELF32 ARM artifact was preserved outside jniLibs; the existing ELF64 AArch64 bridge from commit `82c163d` is packaged and its seven JNI primitive operations and Keystore lifecycle are exercised successfully by the device smoke tests. This updates the historical x86/untested-ABI findings below. Native memory safety and standard-vector validation remain unestablished; complete ECDH-PSI remains BLOCKED. HTTP/WS now have LAN runtime permission support, separate server/local IDs, bounded reconnect, durable status reconciliation and server control-event/replay guards.
+
+
 Audit basis: checked-in Kotlin and Python sources, OPAQUE UniFFI AAR, Bee2 ELF exports, the Python relay, and executed unit/instrumentation tests. The Bee2 C/C++ JNI source and an agreed PSI protocol specification/test vectors are not present, so properties that require those artifacts remain blocked.
 
 | Component | Implementation | Check performed | Problems | Status |

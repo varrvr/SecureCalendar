@@ -17,6 +17,7 @@ import java.util.UUID
 /** Requires the local Python server on the host at 127.0.0.1:8000 (emulator: 10.0.2.2). */
 @RunWith(AndroidJUnit4::class)
 class OpaquePythonE2eTest {
+    @org.junit.Before fun allowLocalNetwork() = grantLocalNetworkForTests()
     @Test
     fun repositoryInstallsAccountBoundAccessTokenAfterOpaqueRegistrationAndLogin() = runBlocking {
         val username = "repo_${UUID.randomUUID().toString().replace("-", "").take(16)}"
@@ -24,7 +25,7 @@ class OpaquePythonE2eTest {
         val manager = ServerSessionManager()
         val repo = ServerAuthRepositoryImpl(
             OpaqueClientImpl(OpaqueParameters.context.copyOf(), OpaqueParameters.serverIdentifier.copyOf()),
-            AuthApi("http://10.0.2.2:8000"),
+            AuthApi(BuildConfig.SERVER_BASE_URL),
             manager
         )
 
@@ -45,7 +46,7 @@ class OpaquePythonE2eTest {
     fun androidOpaqueRegistrationLoginAndWrongPasswordAgainstPython() = runBlocking {
         val username = "e2e_${UUID.randomUUID().toString().replace("-", "").take(16)}"
         val password = "calendar-e2e-${UUID.randomUUID()}"
-        val api = AuthApi("http://10.0.2.2:8000")
+        val api = AuthApi(BuildConfig.SERVER_BASE_URL)
 
         // Values are byte-for-byte paired with server/opaque_auth.py and the
         // vendored P-256 opaque-snake suite.

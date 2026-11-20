@@ -1,5 +1,8 @@
 # Bee2 Android integration
 
+Update 2026-11-20: real JNI primitive and Keystore smoke tests passed on API 37 arm64. The valid ELF64 bridge was recovered from this repository (`82c163d`); the previously misplaced ELF32 artifact is retained under `native-artifacts/unverified`. `verifyBee2Abi` rejects ABI/header mismatches during the build. See [integration-report.md](integration-report.md) for artifact hashes, exact missing JNI entry points, test vectors and remaining PSI blockers. These smoke tests do not establish a production PSI engine.
+
+
 ## Available bridge
 
 The app packages `libbee2bridge.so` for `arm64-v8a`, loaded by `Bee2Provider`. The library exports JNI methods matching Kotlin declarations for BELT hashing, BIGN scalar and point validation, public key derivation, point multiplication, signing, and signature verification. The ELF also contains Bee2 symbols, including `ecpSWU`, but the Kotlin/JNI API does not expose a complete hash-to-curve operation.
@@ -15,7 +18,7 @@ The app packages `libbee2bridge.so` for `arm64-v8a`, loaded by `Bee2Provider`. T
 - a complete agreed hash-to-curve API and vectors, including domain separation;
 - BIGN sign/verify vectors and point/scalar/subgroup validation vectors.
 
-The arm64 instrumentation smoke test must be run on an arm64 Android device. Current x86 emulator cannot execute this artifact.
+The arm64 instrumentation smoke tests have passed on the attached API 37 arm64 emulator. Other ABIs are not packaged. Independent standard vectors and a source audit are still required.
 
 ## Minimum missing PSI JNI contract
 

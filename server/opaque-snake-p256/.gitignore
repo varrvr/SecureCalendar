@@ -1,6 +1,6 @@
 # Rust
 /target/
-Cargo.lock
+# Commit Cargo.lock for the vendored server binding.
 
 # Python
 __pycache__/

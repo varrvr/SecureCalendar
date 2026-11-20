@@ -8,6 +8,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import com.example.calendar.R
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import android.util.Log
@@ -37,6 +39,7 @@ fun ProfileScreen(
     onLogoutClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val logTag = "SecureCalendar.ProfileUi"
     var showPasswordDialog by remember { mutableStateOf(false) }
     var serverPassword by remember { mutableStateOf("") }
@@ -60,7 +63,7 @@ fun ProfileScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "Профиль",
+            text = context.getString(R.string.profile_title),
             style = MaterialTheme.typography.headlineMedium
         )
 
@@ -69,26 +72,26 @@ fun ProfileScreen(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Адрес Python-сервера", style = MaterialTheme.typography.titleMedium)
+                Text(context.getString(R.string.profile_server_address), style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(
                     value = editedServerUrl,
                     onValueChange = { editedServerUrl = it },
-                    label = { Text("http://192.168.1.10:8000") },
+                    label = { Text(context.getString(R.string.profile_server_url)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    "На планшете укажите IP компьютера в той же Wi-Fi сети. Адрес 10.0.2.2 работает только в Android-эмуляторе. Сервер должен слушать 0.0.0.0:8000.",
+                    context.getString(R.string.profile_address_help),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Button(
                     onClick = {
-                        Log.i(logTag, "Save server endpoint clicked; value=$editedServerUrl")
+                        Log.i(logTag, "Save server endpoint clicked; address contents omitted")
                         onServerAddressSave(editedServerUrl)
                     },
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("Сохранить адрес") }
+                ) { Text(context.getString(R.string.profile_save_address)) }
             }
         }
 
@@ -100,7 +103,7 @@ fun ProfileScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    "Имя пользователя",
+                    context.getString(R.string.profile_name),
                     style = MaterialTheme.typography.labelMedium
                 )
 
@@ -110,31 +113,31 @@ fun ProfileScreen(
                 )
 
                 Text(
-                    "Логин",
+                    context.getString(R.string.profile_username),
                     style = MaterialTheme.typography.labelMedium
                 )
 
                 Text(state.login)
 
                 Text(
-                    "Подключение: " + if (state.isConnected) {
-                        "В сети"
+                    context.getString(R.string.profile_connection_prefix) + if (state.isConnected) {
+                        context.getString(R.string.profile_online)
                     } else {
-                        "Нет подключения"
+                        context.getString(R.string.profile_offline)
                     }
                 )
 
                 HorizontalDivider()
 
-                Text("OPAQUE: ${if (state.serverRegistrationStatus == "REGISTERED") "зарегистрирован" else "не зарегистрирован"}")
-                Text("Серверная авторизация: ${if (state.serverAuthenticated) "выполнена" else "не выполнена"}")
-                Text("Отпечаток публичного ключа: ${state.publicKeyFingerprint ?: "Криптографический ключ ещё не создан"}")
+                Text("OPAQUE: ${if (state.serverRegistrationStatus == "REGISTERED") context.getString(R.string.profile_registered) else context.getString(R.string.profile_not_registered)}")
+                Text(context.getString(R.string.profile_auth_state, context.getString(if (state.serverAuthenticated) R.string.profile_authenticated else R.string.profile_not_authenticated)))
+                Text(context.getString(R.string.profile_fingerprint, state.publicKeyFingerprint ?: context.getString(R.string.profile_key_missing)))
             }
         }
 
         if (!state.serverConfigured) {
             Text(
-                "Адрес сервера и согласованные параметры OPAQUE не настроены.",
+                context.getString(R.string.profile_unconfigured),
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -154,7 +157,7 @@ fun ProfileScreen(
                 }
                 com.example.calendar.presentation.components.AnimatedBee(Modifier.size(36.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(if (state.isCreatingKey) "Создаём ключ…" else "Создать ключ Bee2")
+                Text(if (state.isCreatingKey) context.getString(R.string.profile_creating_key) else context.getString(R.string.profile_create_key))
             }
         }
         state.keyError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -168,7 +171,7 @@ fun ProfileScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             if (state.isServerAuthLoading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-            else Text(if (state.isConnected) "Обновить серверную сессию" else if (state.serverConfigured) "Подключиться к серверу" else "Сервер не настроен")
+            else Text(if (state.isConnected) context.getString(R.string.profile_refresh_session) else if (state.serverConfigured) context.getString(R.string.profile_connect) else context.getString(R.string.profile_server_missing))
         }
         state.serverAuthError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
@@ -176,13 +179,13 @@ fun ProfileScreen(
             onClick = onShowQrClick,
             enabled = false,
             modifier = Modifier.fillMaxWidth()
-        ) { Text("QR-код ключа пока недоступен") }
+        ) { Text(context.getString(R.string.profile_qr_unavailable)) }
 
         OutlinedButton(
             onClick = onLogoutClick,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Выйти из аккаунта")
+            Text(context.getString(R.string.profile_logout))
         }
     }
 
@@ -198,17 +201,17 @@ fun ProfileScreen(
                     serverPassword = ""
                 }
             },
-            title = { Text("Подключение к Secure Calendar") },
+            title = { Text(context.getString(R.string.profile_connect_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Пароль используется только для OPAQUE и не сохраняется.")
+                    Text(context.getString(R.string.profile_password_help))
                     state.serverAuthError?.let {
                         Text(it, color = MaterialTheme.colorScheme.error)
                     }
                     OutlinedTextField(
                         value = serverPassword,
                         onValueChange = { serverPassword = it },
-                        label = { Text("Пароль аккаунта") },
+                        label = { Text(context.getString(R.string.profile_password)) },
                         singleLine = true,
                         enabled = !state.isServerAuthLoading,
                         visualTransformation = PasswordVisualTransformation()
@@ -225,7 +228,7 @@ fun ProfileScreen(
                         Log.i(logTag, "Server authentication submitted; password omitted")
                         onConnectClick(password)
                     }
-                ) { Text("Продолжить") }
+                ) { Text(context.getString(R.string.profile_continue)) }
             },
             dismissButton = {
                 TextButton(
@@ -234,7 +237,7 @@ fun ProfileScreen(
                         serverPassword = ""
                         showPasswordDialog = false
                     }
-                ) { Text("Отмена") }
+                ) { Text(context.getString(R.string.profile_cancel)) }
             }
         )
     }

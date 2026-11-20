@@ -21,8 +21,9 @@ import java.util.UUID
 /** Transport/auth integration only. The test payload is synthetic and contains no calendar data. */
 @RunWith(AndroidJUnit4::class)
 class TwoUserServerE2eTest {
-    private val auth = AuthApi("http://10.0.2.2:8000")
-    private val comparison = ComparisonApi("http://10.0.2.2:8000")
+    @org.junit.Before fun allowLocalNetwork() = grantLocalNetworkForTests()
+    private val auth = AuthApi(BuildConfig.SERVER_BASE_URL)
+    private val comparison = ComparisonApi(BuildConfig.SERVER_BASE_URL)
 
     @Test
     fun twoOpaqueUsersSearchRequestAcceptAndRelayOpaqueTestMessage() = runBlocking {
@@ -35,16 +36,16 @@ class TwoUserServerE2eTest {
         val aliceTransport = OkHttpWebSocketTransport(allowInsecureForDebug = true)
         val bobTransport = OkHttpWebSocketTransport(allowInsecureForDebug = true)
         try {
-            val aliceHello = async { withTimeout(10_000) { aliceTransport.incomingText.first { isType(it, "connected") } } }
-            val bobHello = async { withTimeout(10_000) { bobTransport.incomingText.first { isType(it, "connected") } } }
-            aliceTransport.connect("ws://10.0.2.2:8000/ws", alice.accessToken)
-            bobTransport.connect("ws://10.0.2.2:8000/ws", bob.accessToken)
+            val aliceHello = async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { withTimeout(10_000) { aliceTransport.incomingText.first { isType(it, "connected") } } }
+            val bobHello = async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { withTimeout(10_000) { bobTransport.incomingText.first { isType(it, "connected") } } }
+            aliceTransport.connect(BuildConfig.SERVER_BASE_URL.replaceFirst("http", "ws").trimEnd('/') + "/ws", alice.accessToken)
+            bobTransport.connect(BuildConfig.SERVER_BASE_URL.replaceFirst("http", "ws").trimEnd('/') + "/ws", bob.accessToken)
             aliceTransport.state.first { it == WebSocketState.CONNECTED }
             bobTransport.state.first { it == WebSocketState.CONNECTED }
             assertTrue(isType(aliceHello.await(), "connected"))
             assertTrue(isType(bobHello.await(), "connected"))
 
-            val requestEvent = async {
+            val requestEvent = async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
                 withTimeout(10_000) { bobTransport.incomingText.first { isType(it, "session_request") } }
             }
             val now = System.currentTimeMillis() / 1000L
@@ -53,20 +54,20 @@ class TwoUserServerE2eTest {
             assertEquals(session.id, JSONObject(requestEvent.await()).getString("session_id"))
             assertTrue(comparison.listSessions(bob.accessToken).any { it.id == session.id && it.status == "pending" })
 
-            val acceptedEvent = async {
+            val acceptedEvent = async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
                 withTimeout(10_000) { aliceTransport.incomingText.first { isType(it, "session_accepted") } }
             }
             comparison.accept(session.id, bob.accessToken)
             assertEquals(session.id, JSONObject(acceptedEvent.await()).getString("session_id"))
 
-            val payloadEvent = async {
-                withTimeout(10_000) { bobTransport.incomingText.first { isType(it, "transport_probe") } }
+            val payloadEvent = async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                withTimeout(10_000) { bobTransport.incomingText.first { isType(it, "psi_transport_probe") } }
             }
             val syntheticPayload = android.util.Base64.encodeToString(
                 "non-secret transport test".toByteArray(), android.util.Base64.NO_WRAP
             )
             val sent = aliceTransport.sendText(
-                JSONObject().put("type", "transport_probe")
+                JSONObject().put("type", "psi_transport_probe")
                     .put("session_id", session.id)
                     .put("recipient_id", found.id)
                     .put("payload", syntheticPayload).toString()

@@ -12,6 +12,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import android.os.Build
+import com.example.calendar.R
 import com.example.calendar.SecureCalendarApplication
 import com.example.calendar.di.AppViewModelFactory
 import com.example.calendar.presentation.auth.LocalAuthViewModel
@@ -70,6 +76,16 @@ fun SecureCalendarApp(
     var profileState by remember {
         mutableStateOf(ProfileUiState())
     }
+
+    val context = LocalContext.current
+    var pendingServerConnect by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val networkPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val action = pendingServerConnect
+        pendingServerConnect = null
+        if (granted) action?.invoke()
+        else profileState = profileState.copy(serverAuthError = context.getString(R.string.server_network_permission_denied))
+    }
+    DisposableEffect(Unit) { onDispose { pendingServerConnect = null } }
 
     val events by calendarViewModel.events.collectAsState()
     val editor = calendarViewModel.editorState
@@ -337,27 +353,35 @@ fun SecureCalendarApp(
                             isCreatingKey = profileKeyState.isCreating,
                             keyError = profileKeyState.error,
                             isServerAuthLoading = profileServerState.isLoading,
-                            serverAuthError = profileServerState.error ?: profileState.serverAuthError,
+                            serverAuthError = profileState.serverAuthError ?: profileServerState.error,
                             serverBaseUrl = profileServerState.serverBaseUrl
                         ),
                         onShowQrClick = {},
                         onConnectClick = { password ->
+                            profileState = profileState.copy(serverAuthError = null)
                             val account = activeAccount
                             if (account == null) {
                                 android.util.Log.e("SecureCalendar.Profile", "Server connect callback has no active local account; password omitted")
                                 profileState = profileState.copy(serverAuthError = "Нет активной локальной сессии. Выйдите и войдите в локальный аккаунт снова.")
                             } else {
-                                profileViewModel.connectToServer(
-                                    ownerId = account.id,
-                                    username = account.username,
-                                    displayName = account.displayName,
-                                    password = password
-                                )
+                                val connect = {
+                                    profileViewModel.connectToServer(
+                                        ownerId = account.id, username = account.username,
+                                        displayName = account.displayName, password = password
+                                    )
+                                }
+                                if (Build.VERSION.SDK_INT >= 37 &&
+                                    application.container.serverEndpointSettings.requiresLocalNetworkPermission() &&
+                                    ContextCompat.checkSelfPermission(context, "android.permission.ACCESS_LOCAL_NETWORK") != PackageManager.PERMISSION_GRANTED) {
+                                    pendingServerConnect = connect
+                                    networkPermission.launch("android.permission.ACCESS_LOCAL_NETWORK")
+                                } else connect()
                             }
                         },
                         onCreateKeyClick = profileViewModel::createKey,
                         onServerAddressSave = profileViewModel::updateServerAddress,
                         onLogoutClick = {
+                            pendingServerConnect = null
                             activeAccount = null
                             application.container.sessionRepository.clearSession()
                             comparisonViewModel.selectAccount(null)

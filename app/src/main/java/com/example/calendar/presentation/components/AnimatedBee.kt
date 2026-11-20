@@ -5,6 +5,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import com.example.calendar.R
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -15,12 +17,13 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun AnimatedBee(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     val animation = rememberInfiniteTransition(label = "Пчёлка Bee2")
     val flight by animation.animateFloat(-5f, 5f,
         infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "Полёт")
     val wings by animation.animateFloat(0.6f, 1f,
         infiniteRepeatable(tween(90), RepeatMode.Reverse), label = "Крылья")
-    Canvas(modifier.size(56.dp).semantics { contentDescription = "Летающая пчёлка Bee2" }) {
+    Canvas(modifier.size(56.dp).semantics { contentDescription = context.getString(R.string.bee_description) }) {
         val u = size.width / 56f
         translate(0f, flight * u) {
             drawOval(Color(0xFFB9E9F2), Offset(13*u, (10-4*wings)*u), Size(16*u, 17*wings*u))

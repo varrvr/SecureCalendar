@@ -26,7 +26,8 @@ import com.example.calendar.domain.repository.ComparisonRepository
 import com.example.calendar.domain.repository.LocalAuthRepository
 import com.example.calendar.domain.repository.SessionRepository
 
-class AppContainer(application: Application) {
+class AppContainer(private val application: Application) {
+    fun string(id: Int): String = application.getString(id)
 
     val serverEndpointSettings = ServerEndpointSettings(application, BuildConfig.SERVER_BASE_URL)
 

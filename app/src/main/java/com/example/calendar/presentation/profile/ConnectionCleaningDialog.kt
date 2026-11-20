@@ -8,6 +8,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import com.example.calendar.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -25,6 +27,7 @@ private data class Dirt(val x: Float, val y: Float, val radius: Float)
 
 @Composable
 internal fun ConnectionCleaningDialog() {
+    val context = LocalContext.current
     val dirt = remember {
         val random = Random(42)
         List(140) { Dirt(random.nextFloat(), random.nextFloat(), 8f + random.nextFloat() * 12f) }
@@ -35,11 +38,11 @@ internal fun ConnectionCleaningDialog() {
         dismissOnBackPress = false, dismissOnClickOutside = false)) {
         Surface(shape = RoundedCornerShape(28.dp)) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Подключаемся к серверу", style = MaterialTheme.typography.titleLarge)
-                Text("Пока ждём, протрите экран мочалкой — проведите пальцем по грязи.")
+                Text(context.getString(R.string.cleaning_title), style = MaterialTheme.typography.titleLarge)
+                Text(context.getString(R.string.cleaning_help))
                 Canvas(Modifier.fillMaxWidth().height(300.dp)
                     .clip(RoundedCornerShape(18.dp)).background(Color(0xFFE4F5FC))
-                    .semantics { contentDescription = "Экран с грязью. Водите пальцем, чтобы очистить его мочалкой" }
+                    .semantics { contentDescription = context.getString(R.string.cleaning_description) }
                     .pointerInput(Unit) {
                         fun wipe(position: Offset) {
                             val previous = sponge ?: position
@@ -79,8 +82,8 @@ internal fun ConnectionCleaningDialog() {
                             style = Stroke(1.dp.toPx()))
                     }
                 }
-                Text(if (cleaned.size == dirt.size) "Чисто! Ожидаем ответ сервера…"
-                    else "Очищено: ${cleaned.size * 100 / dirt.size}%")
+                Text(if (cleaned.size == dirt.size) context.getString(R.string.cleaning_done)
+                    else context.getString(R.string.cleaning_percent, cleaned.size * 100 / dirt.size))
                 LinearProgressIndicator(Modifier.fillMaxWidth())
             }
         }

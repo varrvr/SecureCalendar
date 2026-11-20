@@ -13,3 +13,8 @@
 - Even a future correct PSI can reveal participation, approximate set sizes/message counts, timing, and the permitted intersection output. That leakage requires product-level agreement.
 - Production server trust/key pinning policy is not implemented. The server returns public Bee2 keys but the app does not yet establish that a returned key belongs to the intended user.
 - `SlotConverter` canonicalizes 15-minute UTC slots but adds no cryptographic privacy.
+
+
+## Verified integration update 2026-11-20
+
+Actual Bee2/JNI primitive/Keystore smoke tests now pass on an arm64 API 37 emulator. This supersedes earlier lack-of-supported-device observations, not the lack of native source, independent vectors or hash-to-curve/PSI protocol. A malformed-ABI supplied artifact was preserved separately and the repository's existing valid arm64 bridge restored. LAN permission is explicitly requested for Android 17; no network or TLS enforcement was disabled. The server remains single-worker because sockets and ephemeral OPAQUE login states are in-memory. Invitations/statuses are durable, opaque relay payloads have no offline delivery guarantee, bounded reconnect is implemented but not subjected to physical-network fault injection. Known development SECRET_KEY must never be used for deployment. See server-setup.md and integration-report.md.

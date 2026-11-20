@@ -24,3 +24,5 @@ local.properties
 /server/opaque-snake-p256/target/
 *.db
 *.sqlite3
+
+/.secrets/
