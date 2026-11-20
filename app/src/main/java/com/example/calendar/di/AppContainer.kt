@@ -14,6 +14,7 @@ import com.example.calendar.domain.repository.CryptoKeyRepository
 import com.example.calendar.data.remote.auth.ServerSessionManager
 import com.example.calendar.data.remote.auth.AuthApi
 import com.example.calendar.data.remote.comparison.ComparisonApi
+import com.example.calendar.data.remote.ServerEndpointSettings
 import com.example.calendar.data.remote.websocket.OkHttpWebSocketTransport
 import com.example.calendar.data.remote.websocket.WebSocketTransport
 import com.example.calendar.data.repository.ServerAuthRepositoryImpl
@@ -22,9 +23,10 @@ import com.example.calendar.domain.repository.EventRepository
 import com.example.calendar.domain.repository.ComparisonRepository
 import com.example.calendar.domain.repository.LocalAuthRepository
 import com.example.calendar.domain.repository.SessionRepository
-import java.net.URI
 
 class AppContainer(application: Application) {
+
+    val serverEndpointSettings = ServerEndpointSettings(application, BuildConfig.SERVER_BASE_URL)
 
     private val database = CalendarDatabase.getInstance(application)
     val localUserDao = database.localUserDao()
@@ -59,27 +61,17 @@ class AppContainer(application: Application) {
             context = OpaqueParameters.context.copyOf(),
             serverIdentifier = OpaqueParameters.serverIdentifier.copyOf()
         ),
-        authApi = AuthApi(BuildConfig.SERVER_BASE_URL),
+        authApi = AuthApi(serverEndpointSettings::current),
         serverSessionManager = serverSessionManager,
         webSocketTransport = webSocketTransport,
-        webSocketUrl = websocketUrl(BuildConfig.SERVER_BASE_URL),
+        webSocketUrl = serverEndpointSettings::webSocketUrl,
         localUsers = localUserDao
     )
 
     val comparisonRepository: ComparisonRepository = ComparisonRepositoryImpl(
-        api = ComparisonApi(BuildConfig.SERVER_BASE_URL),
+        api = ComparisonApi(serverEndpointSettings::current),
         sessions = sessionRepository,
         serverSession = serverSessionManager,
         webSocket = webSocketTransport
     )
-
-    private fun websocketUrl(baseUrl: String): String {
-        val parsed = URI(baseUrl)
-        val scheme = when (parsed.scheme.lowercase()) {
-            "https" -> "wss"
-            "http" -> "ws"
-            else -> error("Server URL must use HTTP(S)")
-        }
-        return URI(scheme, null, parsed.host, parsed.port, "/ws", null, null).toString()
-    }
 }

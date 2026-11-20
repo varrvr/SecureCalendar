@@ -21,7 +21,8 @@ class AppViewModelFactory(private val container: AppContainer) : ViewModelProvid
             container.cryptoKeyRepository,
             container.serverAuthRepository,
             container.serverSessionManager,
-            container.webSocketTransport
+            container.webSocketTransport,
+            container.serverEndpointSettings
         ) as T
         modelClass.isAssignableFrom(ComparisonViewModel::class.java) -> ComparisonViewModel(
             container.comparisonRepository

@@ -1,5 +1,7 @@
 package com.example.calendar.data.remote.comparison
 
+import android.os.SystemClock
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -23,7 +25,13 @@ data class RemoteComparisonSession(
 class ComparisonApiException(val code: Int, val detail: String) : IOException("HTTP $code: $detail")
 
 /** REST adapter for the existing Python /users and /sessions contract. */
-class ComparisonApi(private val baseUrl: String) {
+class ComparisonApi(private val baseUrlProvider: () -> String) {
+    constructor(baseUrl: String) : this({ baseUrl })
+
+    private companion object {
+        const val TAG = "SecureCalendar.ComparisonHttp"
+    }
+
     suspend fun searchUsers(query: String, token: String): List<RemoteUser> {
         val encoded = URLEncoder.encode(query.trim(), Charsets.UTF_8.name())
         val result = request("GET", "/users?query=$encoded", token, null) as JSONArray
@@ -63,7 +71,17 @@ class ComparisonApi(private val baseUrl: String) {
 
     private suspend fun request(method: String, path: String, token: String, body: JSONObject?): Any =
         withContext(Dispatchers.IO) {
-            val connection = URL(baseUrl.trimEnd('/') + path).openConnection() as HttpURLConnection
+            val endpoint = baseUrlProvider().trimEnd('/') + path
+            val safePath = path.substringBefore('?')
+            val startedAt = SystemClock.elapsedRealtime()
+            val requestBytes = body?.toString()?.toByteArray(Charsets.UTF_8)
+            Log.i(TAG, "$method started: $safePath; requestBytes=${requestBytes?.size ?: 0}; bearer token omitted")
+            val connection = try {
+                URL(endpoint).openConnection() as HttpURLConnection
+            } catch (failure: Exception) {
+                Log.e(TAG, "Could not create connection for $safePath; ${failure.javaClass.simpleName}", failure)
+                throw failure
+            }
             try {
                 connection.requestMethod = method
                 connection.connectTimeout = 10_000
@@ -78,13 +96,18 @@ class ComparisonApi(private val baseUrl: String) {
                 val status = connection.responseCode
                 val stream = if (status in 200..299) connection.inputStream else connection.errorStream
                 val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                Log.i(TAG, "$method response: $safePath; status=$status; responseBytes=${response.toByteArray(Charsets.UTF_8).size}; elapsedMs=${SystemClock.elapsedRealtime() - startedAt}")
                 if (status !in 200..299) {
                     val detail = runCatching { JSONObject(response).optString("detail", "Server request failed") }
                         .getOrDefault("Server request failed").take(200)
                     throw ComparisonApiException(status, detail)
                 }
                 JSONTokener(response).nextValue()
+            } catch (failure: Exception) {
+                Log.e(TAG, "$method failed: $safePath; ${failure.javaClass.simpleName}; elapsedMs=${SystemClock.elapsedRealtime() - startedAt}; token and payload omitted", failure)
+                throw failure
             } finally {
+                requestBytes?.fill(0)
                 connection.disconnect()
             }
         }

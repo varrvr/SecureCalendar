@@ -61,10 +61,12 @@ class ComparisonRepositoryImpl(
     override suspend fun incomingRequests(): List<ComparisonInvite> {
         val owner = activeOwner()
         val token = requireToken(owner)
-        val usernames = api.searchUsers("", token).associate { it.id to it.username }
-        return api.listSessions(token)
+        val pending = api.listSessions(token)
             .filter { it.responderId == owner && it.status == "pending" }
-            .map { it.toDomain().copy(initiatorUsername = usernames[it.initiatorId]) }
+        if (pending.isEmpty()) return emptyList()
+
+        val usernames = api.searchUsers("", token).associate { it.id to it.username }
+        return pending.map { it.toDomain().copy(initiatorUsername = usernames[it.initiatorId]) }
     }
 
     override suspend fun accept(sessionId: String): ComparisonInvite =

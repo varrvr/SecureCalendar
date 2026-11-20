@@ -7,8 +7,11 @@ import com.example.calendar.data.repository.ServerAuthRepositoryImpl
 import com.example.calendar.data.remote.auth.ServerSessionManager
 import com.example.calendar.data.remote.websocket.WebSocketTransport
 import com.example.calendar.data.remote.websocket.WebSocketState
+import com.example.calendar.data.remote.ServerEndpointSettings
 import com.example.calendar.domain.model.ServerRegistrationStatus
 import android.util.Base64
+import android.util.Log
+import android.os.Build
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,8 +23,12 @@ class ProfileViewModel(
     private val cryptoKeys: CryptoKeyRepository,
     private val serverAuth: ServerAuthRepositoryImpl,
     private val serverSession: ServerSessionManager,
-    private val webSocket: WebSocketTransport
+    private val webSocket: WebSocketTransport,
+    private val serverEndpointSettings: ServerEndpointSettings
 ) : ViewModel() {
+    private companion object {
+        const val TAG = "SecureCalendar.Profile"
+    }
     private val _keyState = MutableStateFlow(ProfileKeyUiState())
     val keyState = _keyState.asStateFlow()
     private var observeJob: Job? = null
@@ -53,6 +60,7 @@ class ProfileViewModel(
         selectAccount(ownerId)
         _serverState.value = ProfileServerUiState(
             ownerId = ownerId,
+            serverBaseUrl = serverEndpointSettings.current(),
             registrationStatus = status,
             authenticated = serverSession.ownerIdOrNull() == ownerId,
             connected = serverSession.ownerIdOrNull() == ownerId && webSocket.state.value == WebSocketState.CONNECTED
@@ -67,19 +75,46 @@ class ProfileViewModel(
         }
     }
 
+    fun updateServerAddress(value: String) {
+        try {
+            val normalized = serverEndpointSettings.update(value)
+            serverSession.clear()
+            webSocket.disconnect()
+            _serverState.value = _serverState.value.copy(
+                serverBaseUrl = normalized,
+                authenticated = false,
+                connected = false,
+                error = null
+            )
+            Log.i(TAG, "Server address saved; previous in-memory server session cleared")
+        } catch (failure: IllegalArgumentException) {
+            Log.w(TAG, "Invalid server address; ${failure.javaClass.simpleName}: ${failure.message}")
+            _serverState.value = _serverState.value.copy(error = failure.message ?: "Некорректный адрес сервера")
+        } catch (failure: Exception) {
+            Log.e(TAG, "Could not save server address; ${failure.javaClass.simpleName}", failure)
+            _serverState.value = _serverState.value.copy(error = "Не удалось сохранить адрес сервера")
+        }
+    }
+
     fun connectToServer(
         ownerId: Long,
         username: String,
         displayName: String,
         password: String
     ) {
-        if (_serverState.value.isLoading) return
+        if (_serverState.value.isLoading) {
+            Log.w(TAG, "Connect ignored: authentication is already in progress")
+            return
+        }
+        Log.i(TAG, "Server connection requested; ownerId=$ownerId, registrationStatus=${_serverState.value.registrationStatus}")
         viewModelScope.launch {
             _serverState.value = _serverState.value.copy(ownerId = ownerId, isLoading = true, error = null)
             var publicKey: ByteArray? = null
             try {
+                Log.d(TAG, "Reading this account's Bee2 public key")
                 publicKey = cryptoKeys.publicKey(ownerId)
                     ?: error("Сначала создайте ключ Bee2: серверная регистрация требует публичный ключ")
+                Log.d(TAG, "Public key found; bytes=${publicKey.size}; starting server OPAQUE flow")
                 val encodedPublicKey = Base64.encodeToString(publicKey, Base64.NO_WRAP)
                 serverAuth.connectOrRegister(
                     username = username,
@@ -97,9 +132,12 @@ class ProfileViewModel(
                         error = null
                     )
                 }
+                Log.i(TAG, "Server OPAQUE flow and session setup completed; ownerId=$ownerId")
             } catch (cancelled: CancellationException) {
+                Log.i(TAG, "Server connection cancelled; ownerId=$ownerId")
                 throw cancelled
             } catch (failure: Exception) {
+                Log.e(TAG, "Server connection failed; ownerId=$ownerId; error=${failure.javaClass.simpleName}: ${failure.message}", failure)
                 if (_serverState.value.ownerId == ownerId) {
                     _serverState.value = _serverState.value.copy(
                         isLoading = false,
@@ -107,8 +145,18 @@ class ProfileViewModel(
                         error = failure.message?.take(180) ?: "Не удалось подключиться к серверу"
                     )
                 }
+            } catch (failure: LinkageError) {
+                Log.e(TAG, "Native Bee2 linkage failed during server setup; supportedAbis=${Build.SUPPORTED_ABIS.joinToString()}; ${failure.javaClass.simpleName}: ${failure.message}", failure)
+                if (_serverState.value.ownerId == ownerId) {
+                    _serverState.value = _serverState.value.copy(
+                        isLoading = false,
+                        authenticated = false,
+                        error = "Bee2 не загрузилась (${failure.javaClass.simpleName}). См. Logcat: SecureCalendar.Bee2"
+                    )
+                }
             } finally {
                 publicKey?.fill(0)
+                Log.d(TAG, "Server connection operation finished; temporary public-key copy cleared")
             }
         }
     }
@@ -119,17 +167,22 @@ class ProfileViewModel(
         viewModelScope.launch {
             if (_keyState.value.ownerId != ownerId) return@launch
             _keyState.value = _keyState.value.copy(isCreating = true, error = null)
+            Log.i(TAG, "Bee2 key creation started; ownerId=$ownerId; supportedAbis=${Build.SUPPORTED_ABIS.joinToString()}")
             try {
-                cryptoKeys.createKey(ownerId)
+                val fingerprint = cryptoKeys.createKey(ownerId)
+                Log.i(TAG, "Bee2 key created and stored; ownerId=$ownerId; fingerprint=$fingerprint")
             } catch (cancelled: CancellationException) {
+                Log.i(TAG, "Bee2 key creation cancelled; ownerId=$ownerId")
                 throw cancelled
             } catch (failure: Exception) {
+                Log.e(TAG, "Bee2 key creation failed; ownerId=$ownerId; error=${failure.javaClass.simpleName}: ${failure.message}", failure)
                 if (_keyState.value.ownerId == ownerId) {
                     _keyState.value = _keyState.value.copy(error = failure.message ?: "Не удалось создать ключ Bee2")
                 }
             } catch (unsupported: LinkageError) {
+                Log.e(TAG, "Bee2 native library unavailable; ownerId=$ownerId; supportedAbis=${Build.SUPPORTED_ABIS.joinToString()}; ${unsupported.javaClass.simpleName}: ${unsupported.message}", unsupported)
                 if (_keyState.value.ownerId == ownerId) {
-                    _keyState.value = _keyState.value.copy(error = "Bee2 недоступна для архитектуры этого устройства")
+                    _keyState.value = _keyState.value.copy(error = "Bee2 не загрузилась (${unsupported.javaClass.simpleName}). См. Logcat: SecureCalendar.Bee2")
                 }
             } finally {
                 if (_keyState.value.ownerId == ownerId) {
@@ -149,6 +202,7 @@ data class ProfileKeyUiState(
 
 data class ProfileServerUiState(
     val ownerId: Long? = null,
+    val serverBaseUrl: String = "",
     val registrationStatus: ServerRegistrationStatus = ServerRegistrationStatus.NOT_REGISTERED,
     val authenticated: Boolean = false,
     val connected: Boolean = false,

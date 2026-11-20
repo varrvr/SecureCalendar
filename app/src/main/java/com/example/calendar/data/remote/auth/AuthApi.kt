@@ -1,6 +1,8 @@
 package com.example.calendar.data.remote.auth
 
 import android.util.Base64
+import android.util.Log
+import android.os.SystemClock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -22,9 +24,12 @@ data class ServerLoginChallenge(
 
 class AuthApiException(val statusCode: Int, val detail: String) : IOException("HTTP $statusCode: $detail")
 
-class AuthApi(
-    private val baseUrl: String
-) {
+class AuthApi(private val baseUrlProvider: () -> String) {
+    constructor(baseUrl: String) : this({ baseUrl })
+
+    private companion object {
+        const val TAG = "SecureCalendar.AuthHttp"
+    }
 
     suspend fun registrationStart(
         username: String,
@@ -123,10 +128,16 @@ class AuthApi(
         path: String,
         body: JSONObject
     ): JSONObject = withContext(Dispatchers.IO) {
-
-        val connection = URL(
-            baseUrl.trimEnd('/') + path
-        ).openConnection() as HttpURLConnection
+        val endpoint = baseUrlProvider().trimEnd('/') + path
+        val startedAt = SystemClock.elapsedRealtime()
+        val requestBytes = body.toString().toByteArray(Charsets.UTF_8)
+        Log.i(TAG, "POST started: $endpoint; requestBytes=${requestBytes.size}")
+        val connection = try {
+            URL(endpoint).openConnection() as HttpURLConnection
+        } catch (failure: Exception) {
+            Log.e(TAG, "Could not create HTTP connection for $path; ${failure.javaClass.simpleName}", failure)
+            throw failure
+        }
 
         try {
             connection.requestMethod = "POST"
@@ -143,9 +154,7 @@ class AuthApi(
             )
 
             connection.outputStream.use { output ->
-                output.write(
-                    body.toString().toByteArray(Charsets.UTF_8)
-                )
+                output.write(requestBytes)
             }
 
             val code = connection.responseCode
@@ -161,6 +170,8 @@ class AuthApi(
                 ?.use { it.readText() }
                 .orEmpty()
 
+            Log.i(TAG, "POST response: $path; status=$code; responseBytes=${responseText.toByteArray(Charsets.UTF_8).size}; elapsedMs=${SystemClock.elapsedRealtime() - startedAt}")
+
             if (code !in 200..299) {
                 val detail = runCatching { JSONObject(responseText).optString("detail", "Ошибка сервера") }
                     .getOrDefault("Ошибка сервера")
@@ -169,7 +180,12 @@ class AuthApi(
 
             JSONObject(responseText)
 
+        } catch (failure: Exception) {
+            Log.e(TAG, "POST failed: $path; ${failure.javaClass.simpleName}; elapsedMs=${SystemClock.elapsedRealtime() - startedAt}", failure)
+            throw failure
+
         } finally {
+            requestBytes.fill(0)
             connection.disconnect()
         }
     }

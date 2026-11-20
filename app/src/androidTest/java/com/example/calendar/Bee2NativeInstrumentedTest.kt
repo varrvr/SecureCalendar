@@ -16,12 +16,15 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Exercises the actual JNI/Bee2 library; skipped on ABIs for which the project ships no .so. */
+/** Exercises the actual JNI/Bee2 library on ABIs with a packaged JNI bridge. */
 @RunWith(AndroidJUnit4::class)
 class Bee2NativeInstrumentedTest {
     @Test
     fun nativeHashKeysPointMultiplicationAndBignSignatureWork() {
-        assumeTrue("Bee2 JNI is packaged only for arm64-v8a", Build.SUPPORTED_ABIS.contains("arm64-v8a"))
+        assumeTrue(
+            "Bee2 JNI requires arm64-v8a or armeabi-v7a",
+            Build.SUPPORTED_ABIS.any { it == "arm64-v8a" || it == "armeabi-v7a" },
+        )
         val bee2 = Bee2Crypto()
         val sample = "secure-calendar-native-smoke".toByteArray()
         val digest = bee2.hash(sample)
@@ -53,7 +56,10 @@ class Bee2NativeInstrumentedTest {
 
     @Test
     fun keystoreWrappedKeyCanSignAndIsRemovedForOneAccount() = runBlocking {
-        assumeTrue("Bee2 JNI is packaged only for arm64-v8a", Build.SUPPORTED_ABIS.contains("arm64-v8a"))
+        assumeTrue(
+            "Bee2 JNI requires arm64-v8a or armeabi-v7a",
+            Build.SUPPORTED_ABIS.any { it == "arm64-v8a" || it == "armeabi-v7a" },
+        )
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val database = Room.inMemoryDatabaseBuilder(context, CalendarDatabase::class.java).build()
         try {

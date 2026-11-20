@@ -10,11 +10,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import android.util.Log
 
 data class ProfileUiState(
     val username: String = "",
     val login: String = "",
     val isConnected: Boolean = false,
+    val serverBaseUrl: String = "",
     val serverRegistrationStatus: String = "NOT_REGISTERED",
     val serverAuthenticated: Boolean = false,
     val serverConfigured: Boolean = false,
@@ -31,11 +33,25 @@ fun ProfileScreen(
     onShowQrClick: () -> Unit,
     onConnectClick: (String) -> Unit,
     onCreateKeyClick: () -> Unit,
+    onServerAddressSave: (String) -> Unit,
     onLogoutClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val logTag = "SecureCalendar.ProfileUi"
     var showPasswordDialog by remember { mutableStateOf(false) }
     var serverPassword by remember { mutableStateOf("") }
+    var editedServerUrl by remember(state.serverBaseUrl) { mutableStateOf(state.serverBaseUrl) }
+    var awaitingServerAuth by remember { mutableStateOf(false) }
+    LaunchedEffect(state.serverAuthenticated, state.isServerAuthLoading, state.serverAuthError, awaitingServerAuth) {
+        if (awaitingServerAuth && state.serverAuthenticated && !state.isServerAuthLoading) {
+            Log.i(logTag, "Server authentication succeeded; closing password dialog")
+            serverPassword = ""
+            showPasswordDialog = false
+            awaitingServerAuth = false
+        } else if (awaitingServerAuth && state.serverAuthError != null) {
+            awaitingServerAuth = false
+        }
+    }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -47,6 +63,34 @@ fun ProfileScreen(
             text = "Профиль",
             style = MaterialTheme.typography.headlineMedium
         )
+
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("Адрес Python-сервера", style = MaterialTheme.typography.titleMedium)
+                OutlinedTextField(
+                    value = editedServerUrl,
+                    onValueChange = { editedServerUrl = it },
+                    label = { Text("http://192.168.1.10:8000") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "На планшете укажите IP компьютера в той же Wi-Fi сети. Адрес 10.0.2.2 работает только в Android-эмуляторе. Сервер должен слушать 0.0.0.0:8000.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Button(
+                    onClick = {
+                        Log.i(logTag, "Save server endpoint clicked; value=$editedServerUrl")
+                        onServerAddressSave(editedServerUrl)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Сохранить адрес") }
+            }
+        }
 
         ElevatedCard(
             modifier = Modifier.fillMaxWidth()
@@ -114,7 +158,10 @@ fun ProfileScreen(
         state.keyError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
         Button(
-            onClick = { showPasswordDialog = true },
+            onClick = {
+                Log.i(logTag, "Connect-to-server button clicked; configured=${state.serverConfigured}")
+                showPasswordDialog = true
+            },
             enabled = state.serverConfigured && !state.isServerAuthLoading,
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -149,6 +196,9 @@ fun ProfileScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Пароль используется только для OPAQUE и не сохраняется.")
+                    state.serverAuthError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error)
+                    }
                     OutlinedTextField(
                         value = serverPassword,
                         onValueChange = { serverPassword = it },
@@ -165,7 +215,8 @@ fun ProfileScreen(
                     onClick = {
                         val password = serverPassword
                         serverPassword = ""
-                        showPasswordDialog = false
+                        awaitingServerAuth = true
+                        Log.i(logTag, "Server authentication submitted; password omitted")
                         onConnectClick(password)
                     }
                 ) { Text("Продолжить") }

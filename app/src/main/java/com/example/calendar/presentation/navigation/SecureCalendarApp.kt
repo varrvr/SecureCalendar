@@ -22,6 +22,7 @@ import com.example.calendar.presentation.comparison.*
 import com.example.calendar.presentation.editor.EventEditorScreen
 import com.example.calendar.presentation.profile.*
 import com.example.calendar.presentation.profile.ProfileViewModel
+import com.example.calendar.domain.model.LocalAccount
 import java.time.LocalDate
 
 
@@ -53,6 +54,7 @@ fun SecureCalendarApp(
     val profileKeyState by profileViewModel.keyState.collectAsState()
     val profileServerState by profileViewModel.serverState.collectAsState()
     val comparison by comparisonViewModel.state.collectAsState()
+    var activeAccount by remember { mutableStateOf<LocalAccount?>(null) }
     var page by remember {
         mutableStateOf(AppPage.LOGIN)
     }
@@ -74,12 +76,14 @@ fun SecureCalendarApp(
 
     LaunchedEffect(authOperation.account) {
         authOperation.account?.let { account ->
+            activeAccount = account
             profileViewModel.selectAccount(account.id, account.serverRegistrationStatus)
             comparisonViewModel.selectAccount(account.id)
             profileState = ProfileUiState(
                 username = account.displayName,
                 login = account.username,
                 serverRegistrationStatus = account.serverRegistrationStatus.name,
+                serverBaseUrl = application.container.serverEndpointSettings.current(),
                 serverConfigured = true
             )
             loginState = LoginUiState()
@@ -333,11 +337,16 @@ fun SecureCalendarApp(
                             isCreatingKey = profileKeyState.isCreating,
                             keyError = profileKeyState.error,
                             isServerAuthLoading = profileServerState.isLoading,
-                            serverAuthError = profileServerState.error
+                            serverAuthError = profileServerState.error ?: profileState.serverAuthError,
+                            serverBaseUrl = profileServerState.serverBaseUrl
                         ),
                         onShowQrClick = {},
                         onConnectClick = { password ->
-                            authOperation.account?.let { account ->
+                            val account = activeAccount
+                            if (account == null) {
+                                android.util.Log.e("SecureCalendar.Profile", "Server connect callback has no active local account; password omitted")
+                                profileState = profileState.copy(serverAuthError = "Нет активной локальной сессии. Выйдите и войдите в локальный аккаунт снова.")
+                            } else {
                                 profileViewModel.connectToServer(
                                     ownerId = account.id,
                                     username = account.username,
@@ -347,7 +356,9 @@ fun SecureCalendarApp(
                             }
                         },
                         onCreateKeyClick = profileViewModel::createKey,
+                        onServerAddressSave = profileViewModel::updateServerAddress,
                         onLogoutClick = {
+                            activeAccount = null
                             application.container.sessionRepository.clearSession()
                             comparisonViewModel.selectAccount(null)
                             loginState = LoginUiState()

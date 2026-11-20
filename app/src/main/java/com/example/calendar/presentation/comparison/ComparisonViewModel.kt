@@ -8,6 +8,7 @@ import java.time.ZoneOffset
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -17,16 +18,23 @@ class ComparisonViewModel(private val repository: ComparisonRepository) : ViewMo
     val state = _state.asStateFlow()
     private var accountId: Long? = null
     private var incomingJob: Job? = null
+    private var incomingRefreshLoop: Job? = null
     private var requestTimeoutJob: Job? = null
 
     init {
         viewModelScope.launch {
             repository.connected.collect { connected ->
                 _state.value = _state.value.copy(isConnected = connected)
-                if (connected) refreshIncoming()
-                else if (_state.value.status == ComparisonStatus.WAITING) {
-                    requestTimeoutJob?.cancel()
-                    _state.value = _state.value.copy(status = ComparisonStatus.ERROR, error = "Соединение с сервером потеряно")
+                if (connected) {
+                    refreshIncoming()
+                    startIncomingRefreshLoop()
+                } else {
+                    incomingRefreshLoop?.cancel()
+                    incomingRefreshLoop = null
+                    if (_state.value.status == ComparisonStatus.WAITING) {
+                        requestTimeoutJob?.cancel()
+                        _state.value = _state.value.copy(status = ComparisonStatus.ERROR, error = "Соединение с сервером потеряно")
+                    }
                 }
             }
         }
@@ -54,9 +62,14 @@ class ComparisonViewModel(private val repository: ComparisonRepository) : ViewMo
         if (accountId == id) return
         accountId = id
         incomingJob?.cancel()
+        incomingRefreshLoop?.cancel()
+        incomingRefreshLoop = null
         requestTimeoutJob?.cancel()
         _state.value = ComparisonUiState(isConnected = _state.value.isConnected)
-        if (id != null) refreshIncoming()
+        if (id != null) {
+            refreshIncoming()
+            startIncomingRefreshLoop()
+        }
     }
 
     fun selectUser(username: String) {
@@ -141,10 +154,26 @@ class ComparisonViewModel(private val repository: ComparisonRepository) : ViewMo
                     IncomingComparisonUi(it.sessionId, it.initiatorUsername ?: "ID ${it.initiatorId}", it.periodStartEpochSeconds, it.periodEndEpochSeconds)
                 }
                 _state.value = _state.value.copy(incomingRequests = requests)
+                android.util.Log.d(TAG, "Incoming comparison requests refreshed; accountId=$accountId; count=${requests.size}")
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
-                // The screen keeps its current state; reconnect can trigger another refresh.
+            } catch (failure: Exception) {
+                android.util.Log.w(TAG, "Incoming request refresh failed; accountId=$accountId; ${failure.javaClass.simpleName}: ${failure.message}")
+            }
+        }
+    }
+
+    /**
+     * Session invitations are persisted by the server, while WebSocket pushes are best effort.
+     * Periodically reload the durable inbox so invitations created while this user was offline,
+     * or whose push frame was lost during an account switch, still appear in the UI.
+     */
+    private fun startIncomingRefreshLoop() {
+        if (accountId == null || !_state.value.isConnected || incomingRefreshLoop?.isActive == true) return
+        incomingRefreshLoop = viewModelScope.launch {
+            while (isActive && accountId != null && _state.value.isConnected) {
+                refreshIncoming()
+                delay(INCOMING_REFRESH_INTERVAL_MS)
             }
         }
     }
@@ -188,5 +217,10 @@ class ComparisonViewModel(private val repository: ComparisonRepository) : ViewMo
         requestTimeoutJob?.cancel()
         _state.value = _state.value.copy(status = ComparisonStatus.INITIAL, error = null, currentSessionId = null)
         refreshIncoming()
+    }
+
+    private companion object {
+        const val TAG = "SecureCalendar.Comparison"
+        const val INCOMING_REFRESH_INTERVAL_MS = 5_000L
     }
 }
