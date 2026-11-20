@@ -14,7 +14,8 @@ data class ServerAuthResult(
     val accessToken: String,
     val userId: Long,
     val username: String,
-    val displayName: String
+    val displayName: String,
+    val expiresAtMillis: Long
 )
 
 data class ServerLoginChallenge(
@@ -30,6 +31,8 @@ class AuthApi(private val baseUrlProvider: () -> String) {
     private companion object {
         const val TAG = "SecureCalendar.AuthHttp"
     }
+
+    private val registrations = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     suspend fun registrationStart(
         username: String,
@@ -49,6 +52,7 @@ class AuthApi(private val baseUrlProvider: () -> String) {
             body = request
         )
 
+        registrations[username] = response.getString("registration_state_id")
         return decode(response.getString("registration_response"))
     }
 
@@ -59,6 +63,7 @@ class AuthApi(private val baseUrlProvider: () -> String) {
         val request = JSONObject().apply {
             put("username", username)
             put("registration_upload", encode(message))
+            put("registration_state_id", registrations.remove(username) ?: error("Registration must be restarted"))
         }
 
         return parseAuthResult(
@@ -120,7 +125,8 @@ class AuthApi(private val baseUrlProvider: () -> String) {
             displayName = user.optString(
                 "display_name",
                 user.getString("username")
-            )
+            ),
+            expiresAtMillis = response.getLong("expires_at") * 1000L
         )
     }
 
@@ -140,6 +146,7 @@ class AuthApi(private val baseUrlProvider: () -> String) {
         }
 
         try {
+            connection.instanceFollowRedirects = false
             connection.requestMethod = "POST"
             connection.connectTimeout = 10_000
             connection.readTimeout = 15_000

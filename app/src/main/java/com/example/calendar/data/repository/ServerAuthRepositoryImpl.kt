@@ -20,7 +20,8 @@ class ServerAuthRepositoryImpl(
     private val serverSessionManager: ServerSessionManager,
     private val webSocketTransport: WebSocketTransport? = null,
     private val webSocketUrl: (() -> String)? = null,
-    private val localUsers: LocalUserDao? = null
+    private val localUsers: LocalUserDao? = null,
+    private val activeLocalOwner: (() -> Long?)? = null
 ) {
     private val opaqueMutex = Mutex()
     private val tag = "SecureCalendar.OPAQUE"
@@ -34,6 +35,8 @@ class ServerAuthRepositoryImpl(
     ): ServerAuthResult = opaqueMutex.withLock { withContext(Dispatchers.IO) {
 
         Log.i(tag, "Registration flow started; localOwnerId=$localOwnerId")
+        val generation = serverSessionManager.generation()
+        check(activeLocalOwner == null || activeLocalOwner.invoke() == localOwnerId)
         val passwordBytes = password.toByteArray(Charsets.UTF_8)
         var state: ByteArray? = null
         var requestMessage: ByteArray? = null
@@ -73,7 +76,7 @@ class ServerAuthRepositoryImpl(
             authApi.registrationFinish(
                 username = username,
                 message = uploadBytes
-            ).also { result -> completeSession(localOwnerId, result.accessToken) }
+            ).also { result -> completeSession(localOwnerId, result, generation) }
 
         } catch (e: CancellationException) {
             Log.i(tag, "Registration flow cancelled; localOwnerId=$localOwnerId")
@@ -98,6 +101,8 @@ class ServerAuthRepositoryImpl(
     ): ServerAuthResult = opaqueMutex.withLock { withContext(Dispatchers.IO) {
 
         Log.i(tag, "Login flow started; localOwnerId=$localOwnerId")
+        val generation = serverSessionManager.generation()
+        check(activeLocalOwner == null || activeLocalOwner.invoke() == localOwnerId)
         val passwordBytes = password.toByteArray(Charsets.UTF_8)
         var state: ByteArray? = null
         var requestMessage: ByteArray? = null
@@ -136,7 +141,7 @@ class ServerAuthRepositoryImpl(
                 username = username,
                 loginStateId = challenge.loginStateId,
                 message = finalization
-            ).also { result -> completeSession(localOwnerId, result.accessToken) }
+            ).also { result -> completeSession(localOwnerId, result, generation) }
 
         } catch (e: CancellationException) {
             Log.i(tag, "Login flow cancelled; localOwnerId=$localOwnerId")
@@ -185,13 +190,14 @@ class ServerAuthRepositoryImpl(
         }
     }
 
-    private suspend fun completeSession(ownerId: Long, token: String) {
+    private suspend fun completeSession(ownerId: Long, result: ServerAuthResult, generation: Long) {
+        check(activeLocalOwner == null || activeLocalOwner.invoke() == ownerId) { "Local account changed during authentication" }
         Log.i(tag, "Installing authenticated server session; localOwnerId=$ownerId; token omitted")
         localUsers?.updateServerRegistrationStatus(ownerId, "REGISTERED")
-        serverSessionManager.install(ownerId, token)
+        serverSessionManager.install(ownerId, result.accessToken, result.userId, result.expiresAtMillis, generation)
         val transport = webSocketTransport ?: return
         val url = webSocketUrl?.invoke() ?: return
         Log.i(tag, "Opening authenticated WebSocket; endpoint=$url; token omitted")
-        transport.connect(url, token)
+        transport.connect(url, result.accessToken)
     }
 }

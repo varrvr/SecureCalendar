@@ -26,7 +26,7 @@ class TestRegistrationFlow:
         result = client.finish_registration(response, client_state, "password123")
         assert result is not None
         assert result.upload is not None
-        assert len(result.export_key) == 64
+        assert len(result.export_key) == 32
 
         # Step 4: Server stores
         password_file = server.finish_registration(result.upload)
@@ -78,7 +78,7 @@ class TestLoginFlow:
 
         # Keys should match
         assert login_result.session_keys.session_key == server_keys.session_key
-        assert len(login_result.session_keys.session_key) == 64
+        assert len(login_result.session_keys.session_key) == 32
 
     def test_login_wrong_password(self):
         """Test that wrong password raises AuthenticationError."""
@@ -223,7 +223,7 @@ class TestExportKey:
         password_file = server.finish_registration(result.upload)
 
         registration_export_key = result.export_key
-        assert len(registration_export_key) == 64
+        assert len(registration_export_key) == 32
 
         # Login export key
         login_req, login_state = client.start_login("password")
@@ -234,7 +234,7 @@ class TestExportKey:
 
         login_export_key = login_result.session_keys.export_key
         assert login_export_key is not None
-        assert len(login_export_key) == 64
+        assert len(login_export_key) == 32
 
         # Export keys should be the same (deterministic from password)
         assert registration_export_key == login_export_key

@@ -7,9 +7,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.example.calendar.R
 import androidx.compose.ui.unit.dp
 import com.example.calendar.domain.model.TimeInterval
 import com.example.calendar.util.ruLocale
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -34,6 +37,7 @@ data class ComparisonUiState(
     val status: ComparisonStatus = ComparisonStatus.INITIAL,
     val intersections: List<TimeInterval> = emptyList(),
     val error: String? = null,
+    val errorRes: Int? = null,
     val searchResults: List<ComparisonUserUi> = emptyList(),
     val selectedUserId: Long? = null,
     val incomingRequests: List<IncomingComparisonUi> = emptyList(),
@@ -43,7 +47,6 @@ data class ComparisonUiState(
     val isSubmitting: Boolean = false
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ComparisonScreen(
     state: ComparisonUiState,
@@ -59,212 +62,81 @@ fun ComparisonScreen(
     modifier: Modifier = Modifier
 ) {
     var editingStart by remember { mutableStateOf(true) }
-
-    val formatter = DateTimeFormatter.ofPattern(
-        "dd.MM.yyyy",
-        ruLocale
-    )
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            "Сравнение календарей",
-            style = MaterialTheme.typography.headlineMedium
-        )
-
-        Text(
-            "Для сравнения используется только согласованный " +
-                    "период и выбранный пользователь.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        OutlinedTextField(
-            value = state.selectedUser.orEmpty(),
-            onValueChange = onUserSelected,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Логин пользователя") },
-            placeholder = { Text("Введите логин") },
-            singleLine = true,
-            enabled = state.status != ComparisonStatus.WAITING && state.status != ComparisonStatus.PROCESSING
-        )
-
-        OutlinedButton(
-            onClick = onSearchClick,
-            enabled = state.isConnected && !state.isSearching && !state.selectedUser.isNullOrBlank(),
-            modifier = Modifier.fillMaxWidth()
-        ) {
+    val locked = state.isSubmitting || state.status == ComparisonStatus.WAITING || state.status == ComparisonStatus.PROCESSING
+    val formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy", ruLocale)
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text(stringResource(R.string.comparison_title), style = MaterialTheme.typography.headlineMedium)
+        Text(stringResource(if (state.isConnected) R.string.comparison_connected else R.string.comparison_disconnected))
+        Text(stringResource(R.string.comparison_semantics), style = MaterialTheme.typography.bodySmall)
+        OutlinedTextField(value = state.selectedUser.orEmpty(), onValueChange = onUserSelected,
+            label = { Text(stringResource(R.string.comparison_username)) },
+            singleLine = true, enabled = !locked, modifier = Modifier.fillMaxWidth())
+        OutlinedButton(onClick = onSearchClick,
+            enabled = state.isConnected && !state.isSearching && !locked && !state.selectedUser.isNullOrBlank(),
+            modifier = Modifier.fillMaxWidth()) {
             if (state.isSearching) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-            else Text("Найти пользователя")
+            else Text(stringResource(R.string.comparison_find))
         }
         state.searchResults.forEach { peer ->
-            OutlinedButton(
-                onClick = { onUserSelected(peer.username) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("${peer.displayName} (@${peer.username})")
-            }
+            OutlinedButton(onClick = { onUserSelected(peer.username) }, enabled = !locked,
+                modifier = Modifier.fillMaxWidth()) { Text("${peer.displayName} (@${peer.username})") }
         }
-
-        Text(
-            if (state.isConnected) "Сервер подключён" else "Подключитесь к серверу в профиле для поиска пользователей.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        if (state.incomingRequests.isNotEmpty()) {
-            Text("Входящие запросы", style = MaterialTheme.typography.titleMedium)
-            state.incomingRequests.forEach { invite ->
-                ElevatedCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Запрос от ${invite.username} · ${invite.sessionId.take(8)}")
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = { onAcceptRequest(invite.sessionId) }) { Text("Принять") }
-                            OutlinedButton(onClick = { onRejectRequest(invite.sessionId) }) { Text("Отклонить") }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (state.status == ComparisonStatus.WAITING) {
-            OutlinedButton(onClick = onCancelRequest, modifier = Modifier.fillMaxWidth()) {
-                Text("Отменить запрос")
-            }
-        }
-
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = editingStart, onClick = { editingStart = true },
-                label = { Text("Начало периода") })
-            FilterChip(selected = !editingStart, onClick = { editingStart = false },
-                label = { Text("Конец периода") })
+            FilterChip(selected = editingStart, enabled = !locked, onClick = { editingStart = true },
+                label = { Text(stringResource(R.string.comparison_period_start)) })
+            FilterChip(selected = !editingStart, enabled = !locked, onClick = { editingStart = false },
+                label = { Text(stringResource(R.string.comparison_period_end)) })
         }
-        Text("Период: ${state.periodStart.format(formatter)} — ${state.periodEnd.format(formatter)}")
+        Text(stringResource(R.string.comparison_period, state.periodStart.format(formatter), state.periodEnd.format(formatter)))
         key(editingStart) {
-            ComparisonCasino(
-                date = if (editingStart) state.periodStart else state.periodEnd,
-                enabled = !state.isSubmitting && state.status != ComparisonStatus.WAITING &&
-                        state.status != ComparisonStatus.PROCESSING,
-                onDateSelected = { date ->
+            ComparisonCasino(date = if (editingStart) state.periodStart else state.periodEnd,
+                enabled = !locked, onDateSelected = { date ->
                     if (editingStart) onPeriodStartChanged(date) else onPeriodEndChanged(date)
-                }
-            )
+                })
         }
-
-        if (state.periodEnd.isBefore(state.periodStart)) {
-            Text(
-                "Конец периода не может быть раньше начала",
-                color = MaterialTheme.colorScheme.error
-            )
+        if (state.periodEnd.isBefore(state.periodStart)) Text(stringResource(R.string.comparison_invalid_period), color = MaterialTheme.colorScheme.error)
+        Button(onClick = onRequestClick, modifier = Modifier.fillMaxWidth(),
+            enabled = state.isConnected && state.selectedUserId != null && !locked && !state.periodEnd.isBefore(state.periodStart)) {
+            Text(stringResource(R.string.comparison_send))
         }
-
-        Button(
-            onClick = onRequestClick,
-            enabled = state.selectedUserId != null && state.isConnected &&
-                    !state.periodEnd.isBefore(state.periodStart) &&
-                    !state.isSubmitting && state.status != ComparisonStatus.PROCESSING &&
-                    state.status != ComparisonStatus.WAITING,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            if (state.isSubmitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-            else Text("Запросить сравнение")
-        }
-
-        when (state.status) {
-            ComparisonStatus.INITIAL -> {
-                Text("Выберите пользователя и период сравнения")
-            }
-
-            ComparisonStatus.WAITING -> {
-                Text("Ожидание ответа пользователя")
-            }
-
-            ComparisonStatus.PROCESSING -> {
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text(
-                    "Выполняется защищённое сравнение (PSI)…"
-                )
-            }
-
-            ComparisonStatus.SUCCESS -> {
-                Text(
-                    "Сравнение с пользователем " +
-                            state.selectedUser.orEmpty(),
-                    style = MaterialTheme.typography.titleMedium
-                )
-
-                Text(
-                    "Найдено пересечений: ${state.intersections.size}"
-                )
-
-                val dayFormatter = DateTimeFormatter.ofPattern(
-                    "d MMMM",
-                    ruLocale
-                )
-
-                val timeFormatter = DateTimeFormatter.ofPattern(
-                    "HH:mm"
-                )
-
-                state.intersections.forEach { interval ->
-                    val start = interval.start.atZone(
-                        ZoneId.systemDefault()
-                    )
-
-                    val end = interval.end.atZone(
-                        ZoneId.systemDefault()
-                    )
-
-                    ElevatedCard(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            Modifier.padding(16.dp)
-                        ) {
-                            Text(start.format(dayFormatter))
-                            Text(
-                                "${start.format(timeFormatter)}–" +
-                                        end.format(timeFormatter)
-                            )
-                        }
+        if (state.incomingRequests.isNotEmpty()) Text(stringResource(R.string.comparison_inbox), style = MaterialTheme.typography.titleMedium)
+        state.incomingRequests.forEach { invite ->
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.comparison_invite_from, invite.username))
+                    if (invite.periodStart != null && invite.periodEnd != null) {
+                        val start = Instant.ofEpochSecond(invite.periodStart).atZone(ZoneId.of("UTC")).toLocalDate()
+                        val end = Instant.ofEpochSecond(invite.periodEnd).minusNanos(1).atZone(ZoneId.of("UTC")).toLocalDate()
+                        Text(stringResource(R.string.comparison_period, start.format(formatter), end.format(formatter)))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { onAcceptRequest(invite.sessionId) }, enabled = !locked) { Text(stringResource(R.string.comparison_accept)) }
+                        OutlinedButton(onClick = { onRejectRequest(invite.sessionId) }, enabled = !locked) { Text(stringResource(R.string.comparison_reject)) }
                     }
                 }
             }
-
-            ComparisonStatus.EMPTY -> {
-                Text(
-                    "За выбранный период пересечений не найдено"
-                )
+        }
+        when (state.status) {
+            ComparisonStatus.INITIAL -> Text(stringResource(R.string.comparison_initial))
+            ComparisonStatus.WAITING -> {
+                Text(stringResource(R.string.comparison_waiting))
+                OutlinedButton(onClick = onCancelRequest, enabled = !state.isSubmitting) { Text(stringResource(R.string.comparison_cancel)) }
             }
-
-            ComparisonStatus.REJECTED -> {
-                Text(
-                    "Пользователь отклонил запрос на сравнение"
-                )
+            ComparisonStatus.PROCESSING -> {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text(stringResource(R.string.comparison_processing))
             }
-
+            ComparisonStatus.REJECTED -> Text(stringResource(R.string.comparison_rejected))
             ComparisonStatus.ERROR -> {
-                if (state.error?.contains("Bee2", ignoreCase = true) == true) {
-                    com.example.calendar.presentation.components.AnimatedBee()
-                }
-                Text(
-                    state.error ?: "Ошибка сравнения",
-                    color = MaterialTheme.colorScheme.error
-                )
-
-                OutlinedButton(
-                    onClick = onRetryClick
-                ) {
-                    Text("Повторить")
-                }
+                if (state.errorRes == R.string.comparison_crypto_unavailable) com.example.calendar.presentation.components.AnimatedBee()
+                OutlinedButton(onClick = onRetryClick, enabled = !state.isSubmitting) { Text(stringResource(R.string.comparison_retry)) }
+            }
+            ComparisonStatus.SUCCESS, ComparisonStatus.EMPTY -> {
+                // No verified result contract is installed. Fail closed even with an invalid caller state.
+                Text(stringResource(R.string.comparison_crypto_unavailable))
             }
         }
+        state.errorRes?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
     }
-
 }

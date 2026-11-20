@@ -2,225 +2,192 @@ package com.example.calendar.presentation.comparison
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.calendar.R
+import com.example.calendar.crypto.psi.PsiUnavailableException
 import com.example.calendar.domain.repository.ComparisonRepository
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import java.time.LocalDate
 import java.time.ZoneOffset
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 
+/** REST is the durable source of truth; WebSocket events trigger immediate reconciliation. */
 class ComparisonViewModel(private val repository: ComparisonRepository) : ViewModel() {
     private val _state = MutableStateFlow(ComparisonUiState())
     val state = _state.asStateFlow()
     private var accountId: Long? = null
-    private var incomingJob: Job? = null
-    private var incomingRefreshLoop: Job? = null
-    private var requestTimeoutJob: Job? = null
-
+    private var generation = 0L
+    private var operation: Job? = null
+    private var refresh: Job? = null
+    private var timeout: Job? = null
     init {
         viewModelScope.launch {
             repository.connected.collect { connected ->
-                _state.value = _state.value.copy(isConnected = connected)
-                if (connected) {
-                    refreshIncoming()
-                    startIncomingRefreshLoop()
-                } else {
-                    incomingRefreshLoop?.cancel()
-                    incomingRefreshLoop = null
-                    if (_state.value.status == ComparisonStatus.WAITING) {
-                        requestTimeoutJob?.cancel()
-                        _state.value = _state.value.copy(status = ComparisonStatus.ERROR, error = "Соединение с сервером потеряно")
-                    }
+                _state.update { it.copy(isConnected = connected) }
+                if (connected) refreshIncoming()
+                else if (_state.value.status == ComparisonStatus.WAITING) {
+                    _state.update { it.copy(errorRes = R.string.comparison_connection_lost) }
                 }
             }
         }
         viewModelScope.launch {
             repository.signals.collect { signal ->
-                when (signal.type) {
-                    "session_request", "session_cancelled" -> refreshIncoming()
-                    "session_accepted" -> if (signal.sessionId == _state.value.currentSessionId) {
-                        requestTimeoutJob?.cancel()
-                        _state.value = _state.value.copy(
-                            status = ComparisonStatus.ERROR,
-                            error = "Запрос принят. Защищённое сравнение пока недоступно: Bee2 PSI протокол ещё не реализован. Расписание не отправлялось."
-                        )
-                    }
-                    "session_rejected" -> if (signal.sessionId == _state.value.currentSessionId) {
-                        requestTimeoutJob?.cancel()
-                        _state.value = _state.value.copy(status = ComparisonStatus.REJECTED, error = null)
-                    }
+                if (signal.type == "peer_offline" && signal.sessionId == _state.value.currentSessionId) {
+                    _state.update { it.copy(errorRes = R.string.comparison_peer_offline) }
                 }
-            }
-        }
-    }
-
-    fun selectAccount(id: Long?) {
-        if (accountId == id) return
-        accountId = id
-        incomingJob?.cancel()
-        incomingRefreshLoop?.cancel()
-        incomingRefreshLoop = null
-        requestTimeoutJob?.cancel()
-        _state.value = ComparisonUiState(isConnected = _state.value.isConnected)
-        if (id != null) {
-            refreshIncoming()
-            startIncomingRefreshLoop()
-        }
-    }
-
-    fun selectUser(username: String) {
-        val selected = _state.value.searchResults.firstOrNull { it.username.equals(username.trim(), true) }
-        _state.value = _state.value.copy(
-            selectedUser = username,
-            selectedUserId = selected?.id,
-            searchResults = if (selected == null) _state.value.searchResults else emptyList(),
-            status = ComparisonStatus.INITIAL,
-            error = null
-        )
-    }
-
-    fun setPeriodStart(date: LocalDate) { _state.value = _state.value.copy(periodStart = date, error = null) }
-    fun setPeriodEnd(date: LocalDate) { _state.value = _state.value.copy(periodEnd = date, error = null) }
-
-    fun searchUsers() {
-        val query = _state.value.selectedUser?.trim().orEmpty()
-        if (query.isBlank() || !_state.value.isConnected || _state.value.isSearching) return
-        viewModelScope.launch {
-            _state.value = _state.value.copy(isSearching = true, error = null, searchResults = emptyList(), selectedUserId = null)
-            try {
-                val results = repository.searchUsers(query)
-                _state.value = _state.value.copy(
-                    isSearching = false,
-                    searchResults = results.map { ComparisonUserUi(it.id, it.username, it.displayName) },
-                    error = if (results.isEmpty()) "Пользователь не найден" else null
-                )
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Exception) {
-                _state.value = _state.value.copy(isSearching = false, error = failure.message ?: "Поиск не выполнен")
-            }
-        }
-    }
-
-    fun requestComparison() {
-        val current = _state.value
-        val username = current.selectedUser?.trim().orEmpty()
-        if (username.isBlank() || current.selectedUserId == null || !current.isConnected) return
-        if (current.periodEnd.isBefore(current.periodStart)) {
-            _state.value = current.copy(status = ComparisonStatus.ERROR, error = "Некорректный период")
-            return
-        }
-        viewModelScope.launch {
-            _state.value = current.copy(isSubmitting = true, error = null)
-            try {
-                val start = current.periodStart.atStartOfDay(ZoneOffset.UTC).toEpochSecond()
-                val end = current.periodEnd.plusDays(1).atStartOfDay(ZoneOffset.UTC).toEpochSecond()
-                val invite = repository.createRequest(username, start, end)
-                _state.value = _state.value.copy(
-                    selectedUserId = invite.responderId,
-                    currentSessionId = invite.sessionId,
-                    isSubmitting = false,
-                    status = ComparisonStatus.WAITING,
-                    error = null
-                )
-                requestTimeoutJob?.cancel()
-                requestTimeoutJob = viewModelScope.launch {
-                    delay(120_000)
-                    if (_state.value.currentSessionId == invite.sessionId && _state.value.status == ComparisonStatus.WAITING) {
-                        runCatching { repository.cancel(invite.sessionId) }
-                        _state.value = _state.value.copy(
-                            status = ComparisonStatus.ERROR,
-                            error = "Время ожидания ответа истекло"
-                        )
-                    }
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Exception) {
-                _state.value = _state.value.copy(isSubmitting = false, status = ComparisonStatus.ERROR, error = failure.message ?: "Не удалось отправить запрос")
-            }
-        }
-    }
-
-    fun refreshIncoming() {
-        if (!_state.value.isConnected || accountId == null || incomingJob?.isActive == true) return
-        incomingJob = viewModelScope.launch {
-            try {
-                val requests = repository.incomingRequests().map {
-                    IncomingComparisonUi(it.sessionId, it.initiatorUsername ?: "ID ${it.initiatorId}", it.periodStartEpochSeconds, it.periodEndEpochSeconds)
-                }
-                _state.value = _state.value.copy(incomingRequests = requests)
-                android.util.Log.d(TAG, "Incoming comparison requests refreshed; accountId=$accountId; count=${requests.size}")
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Exception) {
-                android.util.Log.w(TAG, "Incoming request refresh failed; accountId=$accountId; ${failure.javaClass.simpleName}: ${failure.message}")
-            }
-        }
-    }
-
-    /**
-     * Session invitations are persisted by the server, while WebSocket pushes are best effort.
-     * Periodically reload the durable inbox so invitations created while this user was offline,
-     * or whose push frame was lost during an account switch, still appear in the UI.
-     */
-    private fun startIncomingRefreshLoop() {
-        if (accountId == null || !_state.value.isConnected || incomingRefreshLoop?.isActive == true) return
-        incomingRefreshLoop = viewModelScope.launch {
-            while (isActive && accountId != null && _state.value.isConnected) {
                 refreshIncoming()
-                delay(INCOMING_REFRESH_INTERVAL_MS)
             }
         }
-    }
-
-    fun acceptRequest(sessionId: String) = respond(sessionId, accept = true)
-    fun rejectRequest(sessionId: String) = respond(sessionId, accept = false)
-
-    fun cancelRequest() {
-        val sessionId = _state.value.currentSessionId ?: return
-        requestTimeoutJob?.cancel()
         viewModelScope.launch {
-            try {
-                repository.cancel(sessionId)
-                _state.value = _state.value.copy(status = ComparisonStatus.INITIAL, currentSessionId = null, error = null)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Exception) {
-                _state.value = _state.value.copy(status = ComparisonStatus.ERROR, error = failure.message ?: "Не удалось отменить запрос")
+            while (isActive) {
+                delay(5000)
+                refreshIncoming()
             }
         }
     }
-
-    private fun respond(sessionId: String, accept: Boolean) {
-        viewModelScope.launch {
-            try {
-                if (accept) repository.accept(sessionId) else repository.reject(sessionId)
-                _state.value = _state.value.copy(
-                    incomingRequests = _state.value.incomingRequests.filterNot { it.sessionId == sessionId },
-                    status = if (accept) ComparisonStatus.ERROR else _state.value.status,
-                    error = if (accept) "Запрос принят, но защищённое сравнение пока недоступно: Bee2 PSI протокол ещё не реализован. Открытые интервалы не передавались." else null
-                )
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Exception) {
-                _state.value = _state.value.copy(status = ComparisonStatus.ERROR, error = failure.message ?: "Не удалось обработать запрос")
-            }
-        }
-    }
-
-    fun retry() {
-        requestTimeoutJob?.cancel()
-        _state.value = _state.value.copy(status = ComparisonStatus.INITIAL, error = null, currentSessionId = null)
+    fun selectAccount(id: Long?) {
+        if (id == accountId) return
+        generation++; accountId = id
+        operation?.cancel(); refresh?.cancel(); timeout?.cancel()
+        _state.value = ComparisonUiState(isConnected = false)
         refreshIncoming()
     }
-
-    private companion object {
-        const val TAG = "SecureCalendar.Comparison"
-        const val INCOMING_REFRESH_INTERVAL_MS = 5_000L
+    private fun busy() = operation?.isActive == true || _state.value.status in
+        setOf(ComparisonStatus.WAITING, ComparisonStatus.PROCESSING)
+    fun selectUser(username: String) {
+        if (busy()) return
+        val peer = _state.value.searchResults.firstOrNull { it.username == username.trim().lowercase() }
+        _state.update { it.copy(selectedUser = username, selectedUserId = peer?.id,
+            status = ComparisonStatus.INITIAL, errorRes = null) }
+    }
+    fun setPeriodStart(date: LocalDate) { if (!busy()) _state.update { it.copy(periodStart = date, errorRes = null) } }
+    fun setPeriodEnd(date: LocalDate) { if (!busy()) _state.update { it.copy(periodEnd = date, errorRes = null) } }
+    fun searchUsers() {
+        val query = _state.value.selectedUser?.trim().orEmpty()
+        if (busy() || query.isBlank() || !_state.value.isConnected) return
+        val version = generation
+        operation = viewModelScope.launch {
+            _state.update { it.copy(isSearching = true, errorRes = null, searchResults = emptyList(), selectedUserId = null) }
+            try {
+                val peers = repository.searchUsers(query)
+                if (version != generation) return@launch
+                _state.update { it.copy(searchResults = peers.map { p -> ComparisonUserUi(p.id, p.username, p.displayName) },
+                    selectedUserId = peers.firstOrNull { p -> p.username == query.lowercase() }?.id,
+                    errorRes = if (peers.isEmpty()) R.string.comparison_user_not_found else null) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) { if (version == generation) _state.update { it.copy(errorRes = errorFor(failure)) } }
+            finally { if (version == generation) _state.update { it.copy(isSearching = false) } }
+        }
+    }
+    fun requestComparison() {
+        val current = _state.value
+        if (busy() || current.selectedUserId == null || !current.isConnected) return
+        if (current.periodEnd.isBefore(current.periodStart)) {
+            _state.update { it.copy(errorRes = R.string.comparison_invalid_period) }; return
+        }
+        val version = generation
+        _state.update { it.copy(isSubmitting = true, errorRes = null) }
+        operation = viewModelScope.launch {
+            try {
+                val invite = repository.createRequest(current.selectedUser.orEmpty().trim().lowercase(),
+                    current.periodStart.atStartOfDay(ZoneOffset.UTC).toEpochSecond(),
+                    current.periodEnd.plusDays(1).atStartOfDay(ZoneOffset.UTC).toEpochSecond())
+                if (version != generation) return@launch
+                _state.update { it.copy(currentSessionId = invite.sessionId, status = ComparisonStatus.WAITING) }
+                timeout?.cancel()
+                timeout = viewModelScope.launch {
+                    delay(120000)
+                    if (version == generation && _state.value.currentSessionId == invite.sessionId &&
+                        _state.value.status == ComparisonStatus.WAITING) {
+                        try { repository.cancel(invite.sessionId) } catch (c: CancellationException) { throw c } catch (_: Exception) { }
+                        _state.update { it.copy(status = ComparisonStatus.ERROR, errorRes = R.string.comparison_timeout) }
+                    }
+                }
+                refreshIncoming()
+            } catch (c: CancellationException) { throw c }
+            catch (failure: Exception) { if (version == generation) _state.update { it.copy(status = ComparisonStatus.ERROR, errorRes = errorFor(failure)) } }
+            finally { if (version == generation) _state.update { it.copy(isSubmitting = false) } }
+        }
+    }
+    fun refreshIncoming() {
+        if (accountId == null || refresh?.isActive == true) return
+        val version = generation
+        refresh = viewModelScope.launch {
+            try {
+                val inbox = repository.incomingRequests()
+                if (version != generation) return@launch
+                _state.update { it.copy(incomingRequests = inbox.map { r ->
+                    IncomingComparisonUi(r.sessionId, r.initiatorUsername.orEmpty(), r.periodStartEpochSeconds, r.periodEndEpochSeconds)
+                }) }
+                val id = _state.value.currentSessionId
+                if (id != null && _state.value.status == ComparisonStatus.WAITING) {
+                    when (repository.session(id).status) {
+                        "accepted", "active" -> prepare(id, version)
+                        "rejected" -> { timeout?.cancel(); _state.update { it.copy(status = ComparisonStatus.REJECTED, errorRes = null) } }
+                        "cancelled" -> { timeout?.cancel(); _state.update { it.copy(status = ComparisonStatus.ERROR, errorRes = R.string.comparison_cancelled) } }
+                    }
+                }
+            } catch (c: CancellationException) { throw c }
+            catch (_: Exception) { /* Durable reconciliation retries after reconnect; no success is synthesized. */ }
+        }
+    }
+    private suspend fun prepare(id: String, version: Long) {
+        timeout?.cancel()
+        if (version != generation) return
+        _state.update { it.copy(status = ComparisonStatus.PROCESSING, errorRes = null) }
+        try {
+            repository.preparePsi(id)
+            // A future engine must return a verified result through a separate result contract.
+            _state.update { it.copy(status = ComparisonStatus.ERROR, errorRes = R.string.comparison_crypto_unavailable) }
+        } catch (c: CancellationException) { throw c }
+        catch (failure: Exception) {
+            if (version == generation) _state.update { it.copy(status = ComparisonStatus.ERROR,
+                errorRes = if (failure is PsiUnavailableException) R.string.comparison_crypto_unavailable else errorFor(failure)) }
+        }
+    }
+    fun acceptRequest(id: String) = respond(id, true)
+    fun rejectRequest(id: String) = respond(id, false)
+    private fun respond(id: String, accept: Boolean) {
+        if (operation?.isActive == true) return
+        val version = generation
+        _state.update { it.copy(isSubmitting = true) }
+        operation = viewModelScope.launch {
+            try {
+                if (accept) repository.accept(id) else repository.reject(id)
+                if (version != generation) return@launch
+                _state.update { it.copy(incomingRequests = it.incomingRequests.filterNot { r -> r.sessionId == id },
+                    currentSessionId = if (accept) id else it.currentSessionId) }
+                if (accept) prepare(id, version)
+            } catch (c: CancellationException) { throw c }
+            catch (failure: Exception) { if (version == generation) _state.update { it.copy(errorRes = errorFor(failure), status = ComparisonStatus.ERROR) } }
+            finally { if (version == generation) _state.update { it.copy(isSubmitting = false) } }
+        }
+    }
+    fun cancelRequest() {
+        val id = _state.value.currentSessionId ?: return
+        if (operation?.isActive == true) return
+        val version = generation
+        operation = viewModelScope.launch {
+            try {
+                val status = repository.session(id).status
+                if (status in setOf("pending", "accepted", "active")) repository.cancel(id)
+                timeout?.cancel()
+                if (version == generation) _state.update { it.copy(status = ComparisonStatus.INITIAL, currentSessionId = null, errorRes = null) }
+            } catch (c: CancellationException) { throw c }
+            catch (failure: Exception) { if (version == generation) _state.update { it.copy(errorRes = errorFor(failure)) } }
+        }
+    }
+    fun retry() {
+        if (_state.value.currentSessionId != null) cancelRequest()
+        else { _state.update { it.copy(status = ComparisonStatus.INITIAL, errorRes = null) }; refreshIncoming() }
+    }
+    private fun errorFor(failure: Exception): Int = when (failure) {
+        is com.example.calendar.data.remote.comparison.ComparisonApiException -> when (failure.code) {
+            401 -> R.string.comparison_auth_required
+            404 -> R.string.comparison_user_not_found
+            409 -> R.string.comparison_conflict
+            else -> R.string.comparison_request_failed
+        }
+        is java.io.IOException -> R.string.comparison_connection_lost
+        else -> R.string.comparison_request_failed
     }
 }

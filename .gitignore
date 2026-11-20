@@ -14,3 +14,13 @@
 .cxx
 local.properties
 *.pyc
+
+# Local verification environments and private runtime data
+/.bootstrap/
+/.venv/
+/.tools/
+/.runtime/
+/.pytest_cache/
+/server/opaque-snake-p256/target/
+*.db
+*.sqlite3

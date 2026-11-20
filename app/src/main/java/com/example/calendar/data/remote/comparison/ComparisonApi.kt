@@ -40,6 +40,11 @@ class ComparisonApi(private val baseUrlProvider: () -> String) {
         }
     }
 
+    suspend fun getUser(id: Long, token: String): RemoteUser =
+        (request("GET", "/users/$id", token, null) as JSONObject).toUser()
+    suspend fun getSession(id: String, token: String): RemoteComparisonSession =
+        (request("GET", "/sessions/${encodePath(id)}", token, null) as JSONObject).toSession()
+
     suspend fun listSessions(token: String): List<RemoteComparisonSession> {
         val result = request("GET", "/sessions", token, null) as JSONArray
         return buildList {
@@ -83,6 +88,7 @@ class ComparisonApi(private val baseUrlProvider: () -> String) {
                 throw failure
             }
             try {
+                connection.instanceFollowRedirects = false
                 connection.requestMethod = method
                 connection.connectTimeout = 10_000
                 connection.readTimeout = 15_000

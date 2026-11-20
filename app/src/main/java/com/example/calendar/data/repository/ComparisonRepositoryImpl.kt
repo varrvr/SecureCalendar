@@ -11,6 +11,7 @@ import com.example.calendar.domain.model.ComparisonSignal
 import com.example.calendar.domain.repository.ComparisonRepository
 import com.example.calendar.domain.repository.SessionRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.mapNotNull
 import org.json.JSONObject
 
@@ -20,12 +21,8 @@ class ComparisonRepositoryImpl(
     private val serverSession: ServerSessionManager,
     private val webSocket: WebSocketTransport
 ) : ComparisonRepository {
-    override val connected: Flow<Boolean> = webSocket.state.mapNotNull { state ->
-        when (state) {
-            WebSocketState.CONNECTED -> true
-            WebSocketState.DISCONNECTED, WebSocketState.ERROR -> false
-            else -> null
-        }
+    override val connected: Flow<Boolean> = combine(webSocket.state, serverSession.owner, sessions.activeUserId) { state, owner, local ->
+        state == WebSocketState.CONNECTED && owner != null && owner == local
     }
 
     override val signals: Flow<ComparisonSignal> = webSocket.incomingText.mapNotNull { raw ->
@@ -54,7 +51,7 @@ class ComparisonRepositoryImpl(
         val token = requireToken(owner)
         val peer = api.searchUsers(username, token).firstOrNull { it.username.equals(username.trim(), true) }
             ?: error("Пользователь с таким логином не найден")
-        require(peer.id != owner) { "Нельзя сравнить календарь с самим собой" }
+        require(peer.id != serverSession.serverUserIdFor(owner)) { "Нельзя сравнить календарь с самим собой" }
         return api.createSession(peer.id, startEpochSeconds, endEpochSeconds, token).toDomain()
     }
 
@@ -62,11 +59,14 @@ class ComparisonRepositoryImpl(
         val owner = activeOwner()
         val token = requireToken(owner)
         val pending = api.listSessions(token)
-            .filter { it.responderId == owner && it.status == "pending" }
+            .filter { it.responderId == serverSession.serverUserIdFor(owner) && it.status == "pending" }
         if (pending.isEmpty()) return emptyList()
 
-        val usernames = api.searchUsers("", token).associate { it.id to it.username }
-        return pending.map { it.toDomain().copy(initiatorUsername = usernames[it.initiatorId]) }
+        val usernames = mutableMapOf<Long, String>()
+        return pending.map { session ->
+                val name = usernames.getOrPut(session.initiatorId) { api.getUser(session.initiatorId, token).username }
+                session.toDomain().copy(initiatorUsername = name)
+            }
     }
 
     override suspend fun accept(sessionId: String): ComparisonInvite =
@@ -77,6 +77,28 @@ class ComparisonRepositoryImpl(
 
     override suspend fun cancel(sessionId: String): ComparisonInvite =
         api.cancel(sessionId, requireToken(activeOwner())).toDomain()
+
+    override suspend fun preparePsi(sessionId: String) {
+        val invite = session(sessionId)
+        check(invite.status == "accepted" || invite.status == "active")
+        val localId = requireNotNull(serverSession.serverUserIdFor(activeOwner()))
+        val initiator = invite.initiatorId == localId
+        val lifecycle = com.example.calendar.crypto.psi.PsiSessionStateMachine(
+            com.example.calendar.crypto.psi.PsiSession(
+                id = invite.sessionId, localUserId = localId,
+                peerUserId = if (initiator) invite.responderId else invite.initiatorId,
+                role = if (initiator) com.example.calendar.crypto.psi.PsiRole.INITIATOR else com.example.calendar.crypto.psi.PsiRole.RESPONDER,
+                periodStart = java.time.Instant.ofEpochSecond(requireNotNull(invite.periodStartEpochSeconds)),
+                periodEnd = java.time.Instant.ofEpochSecond(requireNotNull(invite.periodEndEpochSeconds))
+            )
+        )
+        lifecycle.fail()
+        // No engine or agreed hash-to-curve suite exists. Never read/serialize calendar slots here.
+        throw com.example.calendar.crypto.psi.PsiUnavailableException()
+    }
+
+    override suspend fun session(sessionId: String): ComparisonInvite =
+        api.getSession(sessionId, requireToken(activeOwner())).toDomain()
 
     private fun activeOwner(): Long = requireNotNull(sessions.activeUserId.value) { "Войдите в локальный аккаунт" }
     private fun requireToken(owner: Long): String =

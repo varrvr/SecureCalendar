@@ -65,7 +65,9 @@ def decode_token(token: str) -> int:
 
     payload = json.loads(_b64d(payload_b64).decode("utf-8"))
 
-    if int(payload.get("exp", 0)) < int(time.time()):
+    if not isinstance(payload, dict) or not isinstance(payload.get("uid"), int) or isinstance(payload.get("uid"), bool) or not isinstance(payload.get("exp"), int):
+        raise ValueError("invalid_token_payload")
+    if payload["exp"] <= int(time.time()):
         raise ValueError("token_expired")
 
     return int(payload["uid"])
@@ -79,11 +81,11 @@ def get_current_user(
 
     try:
         user_id = decode_token(credentials.credentials)
-    except ValueError:
+    except (ValueError, TypeError, KeyError, UnicodeError):
         raise HTTPException(status_code=401, detail="invalid_or_expired_token")
 
     user = db.get_user_by_id(user_id)
-    if user is None:
+    if user is None or user["password_file"] is None:
         raise HTTPException(status_code=401, detail="user_not_found")
 
     return user
@@ -92,7 +94,8 @@ def get_current_user(
 def get_user_by_ws_token(token: str) -> Optional[dict]:
     try:
         user_id = decode_token(token)
-    except ValueError:
+    except (ValueError, TypeError, KeyError, UnicodeError):
         return None
 
-    return db.get_user_by_id(user_id)
+    user = db.get_user_by_id(user_id)
+    return user if user and user["password_file"] is not None else None

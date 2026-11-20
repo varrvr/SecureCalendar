@@ -17,6 +17,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 class ProfileViewModel(
@@ -35,9 +36,11 @@ class ProfileViewModel(
     private val _serverState = MutableStateFlow(ProfileServerUiState())
     val serverState = _serverState.asStateFlow()
     private var serverObserveJob: Job? = null
+    private var authJob: Job? = null
 
     fun selectAccount(ownerId: Long) {
         if (_keyState.value.ownerId == ownerId) return
+        authJob?.cancel()
         observeJob?.cancel()
         _keyState.value = ProfileKeyUiState(ownerId = ownerId)
         observeJob = viewModelScope.launch {
@@ -48,6 +51,7 @@ class ProfileViewModel(
     }
 
     fun clearAccount() {
+        authJob?.cancel(); authJob = null
         observeJob?.cancel()
         observeJob = null
         serverObserveJob?.cancel()
@@ -67,15 +71,19 @@ class ProfileViewModel(
         )
         serverObserveJob?.cancel()
         serverObserveJob = viewModelScope.launch {
-            webSocket.state.collect { state ->
+            combine(webSocket.state, serverSession.owner) { state, _ -> state }.collect { state ->
                 if (_serverState.value.ownerId == ownerId) {
-                    _serverState.value = _serverState.value.copy(connected = state == WebSocketState.CONNECTED)
+                    _serverState.value = _serverState.value.copy(
+                        authenticated = serverSession.ownerIdOrNull() == ownerId,
+                        connected = serverSession.ownerIdOrNull() == ownerId && state == WebSocketState.CONNECTED
+                    )
                 }
             }
         }
     }
 
     fun updateServerAddress(value: String) {
+        authJob?.cancel()
         try {
             val normalized = serverEndpointSettings.update(value)
             serverSession.clear()
@@ -107,15 +115,21 @@ class ProfileViewModel(
             return
         }
         Log.i(TAG, "Server connection requested; ownerId=$ownerId, registrationStatus=${_serverState.value.registrationStatus}")
-        viewModelScope.launch {
+        authJob = viewModelScope.launch {
             _serverState.value = _serverState.value.copy(ownerId = ownerId, isLoading = true, error = null)
             var publicKey: ByteArray? = null
             try {
                 Log.d(TAG, "Reading this account's Bee2 public key")
                 publicKey = cryptoKeys.publicKey(ownerId)
-                    ?: error("Сначала создайте ключ Bee2: серверная регистрация требует публичный ключ")
-                Log.d(TAG, "Public key found; bytes=${publicKey.size}; starting server OPAQUE flow")
-                val encodedPublicKey = Base64.encodeToString(publicKey, Base64.NO_WRAP)
+                if (publicKey == null && _serverState.value.registrationStatus != ServerRegistrationStatus.REGISTERED) {
+                    cryptoKeys.createKey(ownerId)
+                    publicKey = cryptoKeys.publicKey(ownerId)
+                }
+                if (publicKey == null && _serverState.value.registrationStatus != ServerRegistrationStatus.REGISTERED) {
+                    error("Криптографический модуль Bee2 недоступен")
+                }
+                Log.d(TAG, "Public key found; bytes=${publicKey?.size ?: 0}; starting server OPAQUE flow")
+                val encodedPublicKey = publicKey?.let { Base64.encodeToString(it, Base64.NO_WRAP) }.orEmpty()
                 serverAuth.connectOrRegister(
                     username = username,
                     displayName = displayName,

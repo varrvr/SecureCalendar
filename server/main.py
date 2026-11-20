@@ -1,5 +1,8 @@
 import base64
 import binascii
+import hashlib
+import secrets
+import sqlite3
 import logging
 import re
 import time
@@ -8,11 +11,11 @@ from dataclasses import dataclass
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from . import database as db
 from . import opaque_auth
-from .auth import create_token, get_current_user
+from .auth import create_token, get_current_user, TOKEN_TTL_SECONDS
 from .websocket import manager, router as websocket_router
 
 
@@ -59,23 +62,31 @@ class RegisterStartRequest(BaseModel):
     username: str = Field(min_length=3, max_length=64)
     display_name: str = Field(min_length=1, max_length=128)
     public_key: str = Field(min_length=1, max_length=8192)
-    registration_request: str  # base64
+    registration_request: str = Field(max_length=16384)  # base64
+
+    @field_validator("username")
+    @classmethod
+    def canonical_username(cls, value: str) -> str:
+        if value != value.strip().lower() or not re.fullmatch(r"[a-z0-9_.-]{3,64}", value):
+            raise ValueError("username_must_be_lowercase_ascii")
+        return value
 
 
 class RegisterFinishRequest(BaseModel):
+    registration_state_id: str = Field(min_length=32, max_length=128)
     username: str
-    registration_upload: str  # base64
+    registration_upload: str = Field(max_length=16384)  # base64
 
 
 class LoginStartRequest(BaseModel):
     username: str
-    credential_request: str  # base64
+    credential_request: str = Field(max_length=16384)  # base64
 
 
 class LoginFinishRequest(BaseModel):
     username: str
     login_state_id: str
-    credential_finalization: str  # base64
+    credential_finalization: str = Field(max_length=16384)  # base64
 
 
 # ---------- Вспомогательные ----------
@@ -104,6 +115,7 @@ def public_session(session: dict) -> dict:
 
 
 def get_session_for_user(session_id: str, current_user: dict) -> dict:
+    db.expire_sessions()
     session = db.get_session(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="session_not_found")
@@ -159,20 +171,23 @@ async def register_start(request: RegisterStartRequest) -> dict:
         # Don't expose native/parser internals or request contents to clients.
         raise HTTPException(
             status_code=400,
-            detail=f"invalid_registration_request:{type(exc).__name__}:{len(raw_request)}",
+            detail="invalid_registration_request",
         ) from exc
 
+    registration_state_id = secrets.token_urlsafe(32)
     try:
-        user = db.create_user_pending(
+        user = db.begin_registration(
             username=request.username,
             display_name=request.display_name,
             public_key=request.public_key,
+            state_hash=hashlib.sha256(registration_state_id.encode()).hexdigest(),
         )
     except ValueError:
         raise HTTPException(status_code=409, detail="username_already_exists")
 
     return {
         "user_id": user["id"],
+        "registration_state_id": registration_state_id,
         "registration_response": base64.b64encode(response_bytes).decode("ascii"),
     }
 
@@ -191,13 +206,14 @@ async def register_finish(request: RegisterFinishRequest) -> dict:
     except Exception as exc:
         raise HTTPException(status_code=400, detail="invalid_registration_upload") from exc
 
-    if not db.set_password_file(user["id"], password_file_bytes):
-        raise HTTPException(status_code=409, detail="already_registered")
+    if not db.finish_registration(request.username, hashlib.sha256(request.registration_state_id.encode()).hexdigest(), password_file_bytes):
+        raise HTTPException(status_code=401, detail="registration_state_missing_or_expired")
     user = db.get_user_by_id(user["id"])
 
     token = create_token(user["id"])
     return {
         "access_token": token,
+        "expires_at": int(time.time()) + TOKEN_TTL_SECONDS,
         "token_type": "bearer",
         "user": public_user(user),
     }
@@ -256,6 +272,7 @@ async def login_finish(request: LoginFinishRequest) -> dict:
     token = create_token(user["id"])
     return {
         "access_token": token,
+        "expires_at": int(time.time()) + TOKEN_TTL_SECONDS,
         "token_type": "bearer",
         "user": public_user(user),
     }
@@ -291,9 +308,9 @@ async def get_user(
 # ---------- Сессии ----------
 
 class CreateSessionRequest(BaseModel):
-    responder_id: int
-    period_start: Optional[int] = None
-    period_end: Optional[int] = None
+    responder_id: int = Field(gt=0)
+    period_start: int = Field(ge=0, le=253402214400)
+    period_end: int = Field(gt=0, le=253402300799)
 
 
 @app.post("/sessions")
@@ -305,7 +322,7 @@ async def create_session(
         raise HTTPException(status_code=400, detail="cannot_compare_with_self")
 
     responder = db.get_user_by_id(request.responder_id)
-    if responder is None:
+    if responder is None or responder["password_file"] is None:
         raise HTTPException(status_code=404, detail="responder_not_found")
 
     if (
@@ -315,14 +332,21 @@ async def create_session(
     ):
         raise HTTPException(status_code=400, detail="invalid_period")
 
+    db.expire_sessions()
+    existing = db.list_sessions_for_user(current_user["id"])
+    if any(s["initiator_id"] == current_user["id"] and s["responder_id"] == request.responder_id and s["status"] in ("pending", "accepted", "active") for s in existing):
+        raise HTTPException(status_code=409, detail="comparison_already_pending")
     session_id = str(uuid.uuid4())
-    session = db.create_session(
-        session_id=session_id,
-        initiator_id=current_user["id"],
-        responder_id=request.responder_id,
-        period_start=request.period_start,
-        period_end=request.period_end,
-    )
+    try:
+        session = db.create_session(
+            session_id=session_id,
+            initiator_id=current_user["id"],
+            responder_id=request.responder_id,
+            period_start=request.period_start,
+            period_end=request.period_end,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="comparison_already_pending") from exc
 
     await manager.send_to_user(
         request.responder_id,
@@ -347,6 +371,7 @@ async def create_session(
 async def list_sessions(
     current_user: dict = Depends(get_current_user),
 ) -> list[dict]:
+    db.expire_sessions()
     sessions = db.list_sessions_for_user(current_user["id"])
     return [public_session(session) for session in sessions]
 
@@ -373,7 +398,8 @@ async def accept_session(
     if session["status"] != "pending":
         raise HTTPException(status_code=409, detail="invalid_session_status")
 
-    db.update_session_status(session_id, "accepted")
+    if not db.transition_session(session_id, ('pending',), "accepted"):
+        raise HTTPException(status_code=409, detail="invalid_session_status")
     session = db.get_session(session_id)
 
     await manager.send_to_user(
@@ -404,7 +430,8 @@ async def reject_session(
     if session["status"] != "pending":
         raise HTTPException(status_code=409, detail="invalid_session_status")
 
-    db.update_session_status(session_id, "rejected")
+    if not db.transition_session(session_id, ('pending',), "rejected"):
+        raise HTTPException(status_code=409, detail="invalid_session_status")
     session = db.get_session(session_id)
 
     await manager.send_to_user(
@@ -429,17 +456,18 @@ async def cancel_session(
 ) -> dict:
     session = get_session_for_user(session_id, current_user)
 
-    if current_user["id"] != session["initiator_id"]:
+    if current_user["id"] != session["initiator_id"] and session["status"] == "pending":
         raise HTTPException(status_code=403, detail="only_initiator_can_cancel")
 
-    if session["status"] not in ("pending", "accepted"):
+    if session["status"] not in ("pending", "accepted", "active"):
         raise HTTPException(status_code=409, detail="invalid_session_status")
 
-    db.update_session_status(session_id, "cancelled")
+    if not db.transition_session(session_id, ('pending', 'accepted', 'active'), "cancelled"):
+        raise HTTPException(status_code=409, detail="invalid_session_status")
     session = db.get_session(session_id)
 
     await manager.send_to_user(
-        session["responder_id"],
+        session["responder_id"] if current_user["id"] == session["initiator_id"] else session["initiator_id"],
         {
             "type": "session_cancelled",
             "session_id": session_id,
@@ -463,7 +491,8 @@ async def complete_session(
     if session["status"] != "active":
         raise HTTPException(status_code=409, detail="invalid_session_status")
 
-    db.update_session_status(session_id, "completed")
+    if not db.transition_session(session_id, ('active',), "completed"):
+        raise HTTPException(status_code=409, detail="invalid_session_status")
     session = db.get_session(session_id)
 
     other_id = (

@@ -12,12 +12,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.calendar.horoscope.HoroscopeCard
 import com.example.calendar.domain.model.CalendarEvent
 import com.example.calendar.presentation.calendar.components.EventCard
 import com.example.calendar.presentation.calendar.components.MonthCalendar
 import com.example.calendar.presentation.calendar.components.buildMonthDates
 import com.example.calendar.util.dayBounds
-import com.example.calendar.util.overlaps
 import com.example.calendar.util.ruLocale
 import java.time.LocalDate
 import java.time.YearMonth
@@ -56,73 +56,74 @@ fun CalendarScreen(
         .toSet()
 
     Box(modifier.fillMaxSize()) {
-        Column(
+        LazyColumn(
+            contentPadding = PaddingValues(bottom = 96.dp),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            Text(
-                text = "Мой календарь",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            MonthCalendar(
-                month = displayedMonth,
-                selectedDate = selectedDate,
-                datesWithEvents = datesWithEvents,
-                onDateSelected = onDateSelected,
-                onPreviousMonth = onPreviousMonth,
-                onNextMonth = onNextMonth,
-                onTodayClick = onTodayClick
-            )
-
-            Spacer(Modifier.height(20.dp))
-
-            Text(
-                text = selectedDate.format(
-                    DateTimeFormatter.ofPattern(
-                        "d MMMM, EEEE",
-                        ruLocale
+            item {
+                Column {
+                    Text(
+                        text = "Мой календарь",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
                     )
-                ),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold
-            )
 
-            Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(12.dp))
 
+                    MonthCalendar(
+                        month = displayedMonth,
+                        selectedDate = selectedDate,
+                        datesWithEvents = datesWithEvents,
+                        onDateSelected = onDateSelected,
+                        onPreviousMonth = onPreviousMonth,
+                        onNextMonth = onNextMonth,
+                        onTodayClick = onTodayClick
+                    )
+
+                    Spacer(Modifier.height(20.dp))
+
+                    Text(
+                        text = selectedDate.format(
+                            DateTimeFormatter.ofPattern(
+                                "d MMMM, EEEE",
+                                ruLocale
+                            )
+                        ),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
+            item(key = "horoscope-$selectedDate") {
+                HoroscopeCard(
+                    eventId = "day:$selectedDate",
+                    title = "Гороскоп на день",
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+            }
             if (selectedEvents.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 28.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+                item {
                     Text(
                         text = "На этот день встреч нет",
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 96.dp)
-                ) {
-                    items(
-                        items = selectedEvents,
-                        key = { it.id }
-                    ) { event ->
-                        EventCard(
-                            event = event,
-                            onClick = { onEventClick(event) }
-                        )
-                    }
+                items(items = selectedEvents, key = { it.id }) { event ->
+                    EventCard(
+                        event = event,
+                        onClick = { onEventClick(event) },
+                    )
+                    Spacer(Modifier.height(10.dp))
                 }
             }
         }
+
 
         FloatingActionButton(
             onClick = onAddEventClick,

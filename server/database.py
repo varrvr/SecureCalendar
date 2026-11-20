@@ -75,6 +75,7 @@ def init_db() -> None:
             """
         )
         conn.commit()
+    init_protocol_tables()
 
 
 def get_setting(key: str) -> Optional[bytes]:
@@ -204,6 +205,10 @@ def create_session(
 ) -> dict:
     now = int(time.time())
     with closing(get_conn()) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if conn.execute("SELECT 1 FROM sessions WHERE initiator_id = ? AND responder_id = ? AND status IN ('pending','accepted','active')",
+                        (initiator_id, responder_id)).fetchone():
+            raise ValueError("comparison_already_pending")
         conn.execute(
             """
             INSERT INTO sessions(
@@ -272,3 +277,79 @@ def list_sessions_for_user(user_id: int) -> list[dict]:
             (user_id, user_id),
         ).fetchall()
         return [dict(row) for row in rows]
+
+
+# Additive protocol metadata. Existing users, password files and sessions are preserved.
+def init_protocol_tables() -> None:
+    with closing(get_conn()) as conn:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS registration_states (
+                username TEXT PRIMARY KEY,
+                state_hash TEXT NOT NULL,
+                expires_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS relay_receipts (
+                session_id TEXT NOT NULL REFERENCES sessions(session_id),
+                sender_id INTEGER NOT NULL REFERENCES users(id),
+                digest TEXT NOT NULL,
+                PRIMARY KEY(session_id, sender_id, digest)
+            );
+        """)
+        conn.commit()
+
+
+def begin_registration(username: str, display_name: str, public_key: str, state_hash: str) -> dict:
+    with closing(get_conn()) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        state = conn.execute("SELECT expires_at FROM registration_states WHERE username = ?", (username,)).fetchone()
+        if (user and user["password_file"] is not None) or (state and state[0] > int(time.time())):
+            raise ValueError("username_already_exists")
+        if user is None:
+            conn.execute("INSERT INTO users(username, display_name, public_key, created_at) VALUES(?, ?, ?, ?)",
+                         (username, display_name, public_key, int(time.time())))
+        else:
+            conn.execute("UPDATE users SET display_name = ?, public_key = ? WHERE username = ? AND password_file IS NULL",
+                         (display_name, public_key, username))
+        conn.execute("INSERT OR REPLACE INTO registration_states VALUES(?, ?, ?)",
+                     (username, state_hash, int(time.time()) + 120))
+        conn.commit()
+    return get_user_by_username(username)
+
+
+def finish_registration(username: str, state_hash: str, password_file: bytes) -> bool:
+    with closing(get_conn()) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        state = conn.execute("SELECT * FROM registration_states WHERE username = ?", (username,)).fetchone()
+        if state is None or state["state_hash"] != state_hash or state["expires_at"] <= int(time.time()):
+            return False
+        updated = conn.execute("UPDATE users SET password_file = ? WHERE username = ? AND password_file IS NULL",
+                               (sqlite3.Binary(password_file), username)).rowcount
+        conn.execute("DELETE FROM registration_states WHERE username = ?", (username,))
+        conn.commit()
+        return updated == 1
+
+
+def transition_session(session_id: str, allowed: tuple[str, ...], status: str) -> bool:
+    placeholders = ','.join('?' for _ in allowed)
+    with closing(get_conn()) as conn:
+        updated = conn.execute(f"UPDATE sessions SET status = ?, updated_at = ? WHERE session_id = ? AND status IN ({placeholders})",
+                               (status, int(time.time()), session_id, *allowed)).rowcount
+        conn.commit()
+        return updated == 1
+
+
+def expire_sessions() -> None:
+    with closing(get_conn()) as conn:
+        conn.execute("UPDATE sessions SET status = 'cancelled', updated_at = ? WHERE "
+                     "(status = 'pending' AND created_at <= ?) OR "
+                     "(status IN ('accepted','active') AND updated_at <= ?)",
+                     (int(time.time()), int(time.time()) - 120, int(time.time()) - 300))
+        conn.commit()
+
+
+def claim_relay(session_id: str, sender_id: int, digest: str) -> bool:
+    with closing(get_conn()) as conn:
+        result = conn.execute("INSERT OR IGNORE INTO relay_receipts VALUES (?, ?, ?)", (session_id, sender_id, digest))
+        conn.commit()
+        return result.rowcount == 1

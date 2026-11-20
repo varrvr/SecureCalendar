@@ -1,6 +1,8 @@
 package com.example.calendar.di
 
 import android.app.Application
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import com.example.calendar.BuildConfig
 import com.example.calendar.data.crypto.OpaqueClientImpl
 import com.example.calendar.data.crypto.OpaqueParameters
@@ -65,8 +67,22 @@ class AppContainer(application: Application) {
         serverSessionManager = serverSessionManager,
         webSocketTransport = webSocketTransport,
         webSocketUrl = serverEndpointSettings::webSocketUrl,
-        localUsers = localUserDao
+        localUsers = localUserDao,
+        activeLocalOwner = { sessionRepository.activeUserId.value }
     )
+
+    init {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launchExpiryGuard()
+    }
+    private fun kotlinx.coroutines.CoroutineScope.launchExpiryGuard() = launch {
+        while (isActive) {
+            kotlinx.coroutines.delay(1000)
+            if (serverSessionManager.ownerIdOrNull() == null &&
+                webSocketTransport.state.value != com.example.calendar.data.remote.websocket.WebSocketState.DISCONNECTED) {
+                webSocketTransport.disconnect()
+            }
+        }
+    }
 
     val comparisonRepository: ComparisonRepository = ComparisonRepositoryImpl(
         api = ComparisonApi(serverEndpointSettings::current),

@@ -13,6 +13,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -25,20 +26,21 @@ import androidx.compose.ui.unit.dp
 fun HoroscopeCard(
     eventId: String,
     modifier: Modifier = Modifier,
+    title: String = "Гороскоп встречи",
 ) {
     val context = LocalContext.current
 
     // Генератор создаётся один раз на карточку. Корпус парсится в память.
-    val generator = remember {
+    val generator = remember(context.applicationContext) {
         HoroscopeGenerator(
             corpus = SecureCalendarCorpus.build(),
             salt = HoroscopeSalt.get(context),
         )
     }
 
-    var nonce by remember(eventId) { mutableLongStateOf(0L) }
+    var nonce by rememberSaveable(eventId) { mutableLongStateOf(0L) }
 
-    val horoscope = remember(eventId, nonce) {
+    val horoscope = remember(generator, eventId, nonce) {
         generator.forMeeting(eventId, nonce)
     }
 
@@ -48,7 +50,7 @@ fun HoroscopeCard(
                 Text("🎲", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    "Гороскоп встречи",
+                    title,
                     style = MaterialTheme.typography.titleMedium,
                 )
             }
@@ -64,7 +66,7 @@ fun HoroscopeCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
-            OutlinedButton(onClick = { nonce = System.currentTimeMillis() }) {
+            OutlinedButton(onClick = { nonce += 1 }) {
                 Text("🎲 Другой")
             }
         }

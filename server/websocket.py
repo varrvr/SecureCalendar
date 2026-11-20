@@ -1,5 +1,9 @@
 import asyncio
 import json
+import base64
+import binascii
+import hashlib
+import re
 import os
 import time
 from collections import defaultdict, deque
@@ -45,7 +49,7 @@ class ConnectionManager:
 
         for websocket in connections:
             try:
-                await websocket.send_json(data)
+                await asyncio.wait_for(websocket.send_json(data), timeout=5)
                 sent = True
             except Exception:
                 dead.append(websocket)
@@ -121,7 +125,13 @@ async def websocket_endpoint(
 
     try:
         while True:
-            raw = await websocket.receive_text()
+            if get_user_by_ws_token(token) is None:
+                await websocket.close(code=1008)
+                break
+            try:
+                raw = await asyncio.wait_for(websocket.receive_text(), timeout=30)
+            except asyncio.TimeoutError:
+                continue
 
             if len(raw) > MAX_MESSAGE_CHARS:
                 await _send_error(websocket, "message_too_large")
@@ -149,6 +159,11 @@ async def websocket_endpoint(
 
             if not isinstance(message_type, str) or not message_type:
                 await _send_error(websocket, "missing_type")
+                continue
+
+            # Server control events may never be forged through the relay.
+            if not re.fullmatch(r"psi_[a-z0-9_]{1,48}", message_type):
+                await _send_error(websocket, "unsupported_type")
                 continue
 
             session_id = message.get("session_id")
@@ -185,6 +200,7 @@ async def websocket_endpoint(
                 )
                 continue
 
+            db.expire_sessions()
             session = db.get_session(session_id)
             if session is None:
                 await _send_error(
@@ -225,8 +241,24 @@ async def websocket_endpoint(
                 )
                 continue
 
-            if session["status"] == "accepted":
-                db.update_session_status(session_id, "active")
+            payload = message.get("payload")
+            try:
+                if not isinstance(payload, str):
+                    raise ValueError("payload_must_be_base64")
+                decoded = base64.b64decode(payload, validate=True)
+                if not decoded:
+                    raise ValueError("empty_payload")
+            except (ValueError, binascii.Error):
+                await _send_error(websocket, "invalid_payload", session_id=session_id)
+                continue
+            digest = hashlib.sha256(message_type.encode() + b"\0" + decoded).hexdigest()
+            if not manager.active.get(other_id):
+                await _send_error(websocket, "recipient_offline", session_id=session_id)
+                continue
+            if not db.claim_relay(session_id, user_id, digest):
+                await _send_error(websocket, "duplicate_message", session_id=session_id)
+                continue
+
 
             outgoing = {
                 "type": message_type,
@@ -238,6 +270,8 @@ async def websocket_endpoint(
             }
 
             delivered = await manager.send_to_user(other_id, outgoing)
+            if delivered:
+                db.transition_session(session_id, ("accepted",), "active")
             if not delivered:
                 await _send_error(
                     websocket,
@@ -249,3 +283,12 @@ async def websocket_endpoint(
         pass
     finally:
         await manager.disconnect(user_id, websocket)
+        if not manager.active.get(user_id):
+            for session in db.list_sessions_for_user(user_id):
+                if session["status"] in ("pending", "accepted", "active"):
+                    peer = session["responder_id"] if user_id == session["initiator_id"] else session["initiator_id"]
+                    await manager.send_to_user(peer, {
+                        "type": "peer_offline", "session_id": session["session_id"],
+                        "sender_id": user_id, "recipient_id": peer,
+                        "server_ts": int(time.time() * 1000)
+                    })

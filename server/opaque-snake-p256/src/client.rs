@@ -58,11 +58,14 @@ impl OpaqueClient {
     ///
     /// Raises:
     ///     ProtocolError: If state has already been used.
+    #[pyo3(signature = (response, state, password, client_identifier=None, server_identifier=None))]
     fn finish_registration(
         &self,
         response: &RegistrationResponse,
         state: &mut ClientRegistrationState,
         password: &str,
+        client_identifier: Option<Vec<u8>>,
+        server_identifier: Option<Vec<u8>>,
     ) -> PyResult<RegistrationResult> {
         let mut rng = rand::thread_rng();
         let inner_state = state
@@ -74,7 +77,10 @@ impl OpaqueClient {
                 &mut rng,
                 password.as_bytes(),
                 response.inner().clone(),
-                opaque_ke::ClientRegistrationFinishParameters::default(),
+                opaque_ke::ClientRegistrationFinishParameters {
+                    identifiers: opaque_ke::Identifiers { client: client_identifier.as_deref(), server: server_identifier.as_deref() },
+                    ..Default::default()
+                },
             )
             .map_err(|e| OpaqueSnakeError::Protocol(e.to_string()))?;
 
@@ -117,11 +123,15 @@ impl OpaqueClient {
     /// Raises:
     ///     AuthenticationError: If authentication fails (wrong password).
     ///     ProtocolError: If state has already been used.
+    #[pyo3(signature = (response, state, password, context=None, client_identifier=None, server_identifier=None))]
     fn finish_login(
         &self,
         response: &CredentialResponse,
         state: &mut ClientLoginState,
         password: &str,
+        context: Option<Vec<u8>>,
+        client_identifier: Option<Vec<u8>>,
+        server_identifier: Option<Vec<u8>>,
     ) -> PyResult<LoginResult> {
         let mut rng = rand::thread_rng();
         let inner_state = state
@@ -133,7 +143,11 @@ impl OpaqueClient {
                 &mut rng,
                 password.as_bytes(),
                 response.inner().clone(),
-                opaque_ke::ClientLoginFinishParameters::default(),
+                opaque_ke::ClientLoginFinishParameters {
+                    context: context.as_deref(),
+                    identifiers: opaque_ke::Identifiers { client: client_identifier.as_deref(), server: server_identifier.as_deref() },
+                    ..Default::default()
+                },
             )
             .map_err(|_| OpaqueSnakeError::Authentication)?;
 
