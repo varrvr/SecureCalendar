@@ -340,52 +340,14 @@ fun EventEditorScreen(
             uiState.endTime
         }
 
-        val state = rememberTimePickerState(
-            initialHour = current.hour,
-            initialMinute = current.minute,
-            is24Hour = true
-        )
-
-        AlertDialog(
-            onDismissRequest = { picker = null },
-            title = {
-                Text(
-                    if (isStart) "Время начала"
-                    else "Время окончания"
-                )
-            },
-            text = {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    TimePicker(state)
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val chosen = LocalTime.of(
-                            state.hour,
-                            state.minute
-                        )
-
-                        if (isStart) {
-                            onStartTimeChange(chosen)
-                        } else {
-                            onEndTimeChange(chosen)
-                        }
-
-                        picker = null
-                    }
-                ) {
-                    Text("Готово")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { picker = null }) {
-                    Text("Отмена")
-                }
+        MeetingTimePickerDialog(
+            current = current,
+            title = if (isStart) "Время начала" else "Время окончания",
+            onDismiss = { picker = null },
+            onConfirm = { chosen ->
+                if (isStart) onStartTimeChange(chosen)
+                else onEndTimeChange(chosen)
+                picker = null
             }
         )
     }

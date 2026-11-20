@@ -10,7 +10,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.calendar.domain.model.TimeInterval
 import com.example.calendar.util.ruLocale
-import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -59,9 +58,7 @@ fun ComparisonScreen(
     onRetryClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectStart by remember {
-        mutableStateOf<Boolean?>(null)
-    }
+    var editingStart by remember { mutableStateOf(true) }
 
     val formatter = DateTimeFormatter.ofPattern(
         "dd.MM.yyyy",
@@ -139,21 +136,21 @@ fun ComparisonScreen(
             }
         }
 
-        OutlinedButton(
-            onClick = { selectStart = true },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Начало периода: ${state.periodStart.format(formatter)}"
-            )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = editingStart, onClick = { editingStart = true },
+                label = { Text("Начало периода") })
+            FilterChip(selected = !editingStart, onClick = { editingStart = false },
+                label = { Text("Конец периода") })
         }
-
-        OutlinedButton(
-            onClick = { selectStart = false },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Конец периода: ${state.periodEnd.format(formatter)}"
+        Text("Период: ${state.periodStart.format(formatter)} — ${state.periodEnd.format(formatter)}")
+        key(editingStart) {
+            ComparisonCasino(
+                date = if (editingStart) state.periodStart else state.periodEnd,
+                enabled = !state.isSubmitting && state.status != ComparisonStatus.WAITING &&
+                        state.status != ComparisonStatus.PROCESSING,
+                onDateSelected = { date ->
+                    if (editingStart) onPeriodStartChanged(date) else onPeriodEndChanged(date)
+                }
             )
         }
 
@@ -253,6 +250,9 @@ fun ComparisonScreen(
             }
 
             ComparisonStatus.ERROR -> {
+                if (state.error?.contains("Bee2", ignoreCase = true) == true) {
+                    com.example.calendar.presentation.components.AnimatedBee()
+                }
                 Text(
                     state.error ?: "Ошибка сравнения",
                     color = MaterialTheme.colorScheme.error
@@ -267,57 +267,4 @@ fun ComparisonScreen(
         }
     }
 
-    if (selectStart != null) {
-        val isStart = selectStart == true
-
-        val current = if (isStart) {
-            state.periodStart
-        } else {
-            state.periodEnd
-        }
-
-        val dateState = rememberDatePickerState(
-            initialSelectedDateMillis = current
-                .atStartOfDay(ZoneId.of("UTC"))
-                .toInstant()
-                .toEpochMilli()
-        )
-
-        DatePickerDialog(
-            onDismissRequest = {
-                selectStart = null
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        dateState.selectedDateMillis?.let {
-                            val date = Instant
-                                .ofEpochMilli(it)
-                                .atZone(ZoneId.of("UTC"))
-                                .toLocalDate()
-
-                            if (isStart) {
-                                onPeriodStartChanged(date)
-                            } else {
-                                onPeriodEndChanged(date)
-                            }
-                        }
-
-                        selectStart = null
-                    }
-                ) {
-                    Text("Готово")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { selectStart = null }
-                ) {
-                    Text("Отмена")
-                }
-            }
-        ) {
-            DatePicker(state = dateState)
-        }
-    }
 }
