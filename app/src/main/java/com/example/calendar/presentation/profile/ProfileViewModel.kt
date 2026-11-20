@@ -129,7 +129,7 @@ class ProfileViewModel(
                         isLoading = false,
                         authenticated = true,
                         registrationStatus = ServerRegistrationStatus.REGISTERED,
-                        error = null,
+                        error = null
                     )
                 }
                 Log.i(TAG, "Server OPAQUE flow and session setup completed; ownerId=$ownerId")
