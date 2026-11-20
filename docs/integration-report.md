@@ -131,3 +131,12 @@ Android network/data: `ServerEndpointSettings.kt`, `AuthApi.kt`, `ServerSessionM
 Android UI: `ComparisonViewModel.kt`, `ComparisonScreen.kt`, `ComparisonCasino.kt`, `ProfileViewModel.kt`, `ProfileScreen.kt`, `ConnectionCleaningDialog.kt`, `AnimatedBee.kt`, `SecureCalendarApp.kt`; строки network/comparison/profile вынесены в `values/strings.xml` и `values-ru/strings.xml`. Розовая тема, календарь и предыдущие гороскопы сохранены.
 
 Build/native: `app/build.gradle.kts`, `gradle/libs.versions.toml`, `AndroidManifest.xml`, восстановленный arm64 `libbee2bridge.so`, сохранённый исходный артефакт и `native-artifacts/README.md`. Добавлены/обновлены E2E и session-manager tests, `.gitignore`, `docs/server-setup.md`, `docs/verification-environment.txt` и этот отчёт. Пользовательские изменения IDE не откатывались; git reset/очистка БД не выполнялись.
+
+
+## Дополнение: исходная Bee2 и требуемая malicious security
+
+После предоставленных пользователем ссылок добавлен source-backed `native/bee2-mapping`, стандартная BAKE SWU operation и `Bee2StandardMapping`. Пин upstream: `4341f7a5c300f8e6dc292559e671eb899d831433`, исходники получаются через `fetch.py`. Официальные upstream tests и host negative/vector tests прошли; новый Android JNI совпал с официальным вектором и действующей кодировкой Bee2. Метаданные и хеши — `native/bee2-mapping/artifact.json`. Лицензия включена в assets APK.
+
+Актуальная Android проверка: **16 instrumentation tests**, 0 failures/errors/skips; JVM — **15 tests**, без ошибок. Последний device run использовал `-PsecureCalendarIntegrationTests=true` и отдельный пакет `com.example.calendar.integrationtest`. Один предыдущий device run встретил device offline при установке; его зелёный Gradle exit не считался доказательством. После восстановления ADB тесты выполнены повторно и результаты XML проверены.
+
+Пользователь явно выбрал защиту от нарушающего протокол собеседника. Поэтому простая semi-honest ECDH-схема не включена. Полный malicious-secure PSI остаётся BLOCKED; стандартное fixed-input BAKE SWU отображение не является само по себе complete HashToCurve suite или malicious PSI engine. План и найденные ограничения кандидатов — `docs/psi-malicious-plan.md`. VOLE-PSI изучается отдельно в `.tools` и не заменяет Bee2 в приложении.

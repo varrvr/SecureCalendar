@@ -20,7 +20,7 @@
     <string name="comparison_processing">Выполняется защищённое сравнение…</string>
     <string name="comparison_rejected">Пользователь отклонил запрос</string>
     <string name="comparison_retry">Сбросить и повторить</string>
-    <string name="comparison_crypto_unavailable">Криптографический модуль недоступен: отсутствуют Bee2 Hash-to-Curve и проверенный PSI-движок. Расписание не отправлялось.</string>
+    <string name="comparison_crypto_unavailable">Защищённое сравнение недоступно: PSI-движок с защитой от нарушающего протокол собеседника ещё не подключён. Расписание не отправлялось.</string>
     <string name="comparison_connection_lost">Сервер недоступен или соединение потеряно. Проверьте адрес и подключитесь снова в профиле.</string>
     <string name="comparison_user_not_found">Не удалось найти пользователя</string>
     <string name="comparison_auth_required">Серверная сессия истекла. Войдите снова в профиле.</string>

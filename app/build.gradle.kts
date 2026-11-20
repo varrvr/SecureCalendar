@@ -37,6 +37,9 @@ android {
 
     buildTypes {
         debug {
+            if (providers.gradleProperty("secureCalendarIntegrationTests").orElse("false").get().toBoolean()) {
+                applicationIdSuffix = ".integrationtest"
+            }
             manifestPlaceholders["cleartextTraffic"] = "true"
             buildConfigField("String", "SERVER_BASE_URL", "\"${providers.gradleProperty("secureCalendarDebugServerUrl").orElse("http://10.0.2.2:8000").get()}\"")
         }
@@ -98,10 +101,11 @@ dependencies {
 
 // Reject misplaced ELF artifacts before they can ship in an APK.
 val verifyBee2Abi = tasks.register("verifyBee2Abi") {
-    inputs.files(fileTree("src/main/jniLibs") { include("**/libbee2bridge.so") })
+    inputs.files(fileTree("src/main/jniLibs") { include("**/libbee2bridge.so", "**/libbee2mapping.so") })
     doLast {
         inputs.files.files.forEach { library ->
             val header = library.inputStream().use { it.readNBytes(20) }
+            check(header.size == 20) { "Truncated Bee2 ELF header" }
             val machine = (header[18].toInt() and 255) or ((header[19].toInt() and 255) shl 8)
             val valid = when (library.parentFile.name) {
                 "arm64-v8a" -> header[4].toInt() == 2 && machine == 183

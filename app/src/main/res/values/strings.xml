@@ -21,7 +21,7 @@
     <string name="comparison_processing">Performing protected comparison…</string>
     <string name="comparison_rejected">The other user declined the request</string>
     <string name="comparison_retry">Reset and try again</string>
-    <string name="comparison_crypto_unavailable">Cryptographic module unavailable: Bee2 hash-to-curve and a verified PSI engine are missing. No schedule was sent.</string>
+    <string name="comparison_crypto_unavailable">Protected comparison is unavailable: a PSI engine secure against a peer that violates the protocol is not connected. No schedule was sent.</string>
     <string name="comparison_connection_lost">Server unavailable or connection lost. Check the address and connect again in Profile.</string>
     <string name="comparison_user_not_found">User not found</string>
     <string name="comparison_auth_required">Server session expired. Sign in again in Profile.</string>

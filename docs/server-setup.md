@@ -109,7 +109,7 @@ REST-последовательность регистрации: `/auth/registe
 
 ```sh
 .venv/bin/python -m pytest server/tests server/opaque-snake-p256/tests -q --tb=short
-./gradlew :app:connectedDebugAndroidTest --no-configuration-cache \
+./gradlew :app:connectedDebugAndroidTest --no-configuration-cache -PsecureCalendarIntegrationTests=true \
   -Pandroid.testInstrumentationRunnerArguments.class=com.example.calendar.OpaquePythonE2eTest
 ```
 
@@ -133,7 +133,7 @@ HTTP использует `Authorization: Bearer ...`; существующий 
 
 ```sh
 ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest
-./gradlew :app:connectedDebugAndroidTest --no-configuration-cache
+./gradlew :app:connectedDebugAndroidTest --no-configuration-cache -PsecureCalendarIntegrationTests=true
 ```
 
 `ComparisonRepositoryE2eTest` использует настоящие Bee2 public keys, OPAQUE и два независимых Android-клиента с разными локальными/серверными ID. `ComparisonFlowUiTest` проводит приглашение через ViewModel, отображает его Бобу, нажимает «Принять» в Compose и проверяет честную ошибку PSI у обоих. `TwoUserServerE2eTest` отдельно проверяет relay с явно синтетическими **транспортными**, а не криптографическими данными.
@@ -164,3 +164,5 @@ HTTP использует `Authorization: Bearer ...`; существующий 
 ## Изолированная среда текущей проверки
 
 Созданы `.runtime/android-integration.sqlite3`, `.runtime/integration.secret` (0600) и `.runtime/run_server.py`. Проверочный сервер запущен через `PYTHONPATH="$PWD" .venv/bin/python .runtime/run_server.py` и слушает 8000; эти файлы не коммитятся. Рабочая `server/secure_calendar.db` не использовалась и не удалялась. Не публикуйте `.runtime`, `.secrets` или токены. Если порт занят этим процессом, остановите именно его перед запуском другой конфигурации, не удаляйте БД.
+
+Instrumentation можно запускать с `-PsecureCalendarIntegrationTests=true`: используется отдельный пакет `com.example.calendar.integrationtest`, чтобы установка и удаление тестового APK не затрагивали основной пакет приложения. После такого запуска соберите обычный `:app:assembleDebug` без этого свойства для APK основного приложения.

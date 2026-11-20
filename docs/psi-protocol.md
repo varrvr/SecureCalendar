@@ -28,3 +28,12 @@ Before implementing a real engine, both developers must agree and record:
 Android now reconciles persisted HTTP invitation/session states with WS triggers, enters PSI preparation only after server acceptance, constructs a guarded session with **server** participant IDs and fails closed through PsiUnavailableException. No local slot set is serialized at this boundary. The real two-account Compose test confirms both parties display crypto unavailable after acceptance. The relay accepts only psi_* envelopes with nonempty valid Base64, overwrites sender_id from auth, rejects wrong session/recipient/status and exact replay; server control events cannot be sent via relay. Replay fingerprints are routing metadata, not cryptographic transcript verification.
 
 The current UI explicitly describes overlap of public **busy** 15-minute UTC slots; private events are excluded. Common free intervals are a different product contract and have not been substituted. As no engine exists, neither kind of result is currently produced. See integration-report.md for the exact remaining native/protocol contracts.
+
+
+## Обязательная модель безопасности (уточнение пользователя)
+
+Требуется защита от собеседника, намеренно нарушающего протокол, то есть malicious security, а не только semi-honest. Простое двойное ECDH-маскирование с подписями не считается выполнением этого требования. Должны проверяться криптографические доказательства/consistency checks выбранного опубликованного протокола, с остановкой при нарушении. Заявление README само по себе не является подтверждением реализации.
+
+Добавленная Bee2 BAKE SWU mapping operation проверена по стандартному вектору на host и Android, но не является полным random-oracle HashToCurve suite или malicious-secure PSI. Нельзя автоматически активировать SUCCESS/EMPTY после появления этой библиотеки.
+
+Malicious security допускает abort и не доказывает правдивость календаря собеседника. Произвольно выбранные входы и повторные согласованные запросы требуют политики доступа; никто не должен обещать защиту от раскрытия, разрешённого самим результатом PSI. См. `psi-malicious-plan.md`.
