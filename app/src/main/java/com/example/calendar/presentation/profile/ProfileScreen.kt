@@ -108,6 +108,8 @@ fun ProfileScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                 }
+                com.example.calendar.presentation.components.AnimatedBee(Modifier.size(36.dp))
+                Spacer(Modifier.width(8.dp))
                 Text(if (state.isCreatingKey) "Создаём ключ…" else "Создать ключ Bee2")
             }
         }
@@ -135,6 +137,10 @@ fun ProfileScreen(
         ) {
             Text("Выйти из аккаунта")
         }
+    }
+
+    if (state.isServerAuthLoading) {
+        ConnectionCleaningDialog()
     }
 
     if (showPasswordDialog) {
