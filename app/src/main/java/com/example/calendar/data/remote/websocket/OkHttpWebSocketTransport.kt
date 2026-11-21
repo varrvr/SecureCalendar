@@ -10,10 +10,12 @@ import java.util.concurrent.TimeUnit
 /** One authenticated socket, bounded reconnect, heartbeat and stale-listener isolation. */
 class OkHttpWebSocketTransport(
     private val allowInsecureForDebug: Boolean = false,
-    private val client: OkHttpClient = OkHttpClient.Builder()
+    client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS).readTimeout(0, TimeUnit.MILLISECONDS)
         .pingInterval(20, TimeUnit.SECONDS).build()
 ) : WebSocketTransport {
+    // The upgrade URL carries a bearer token. Never follow redirects, including TLS downgrade.
+    private val client = client.newBuilder().followRedirects(false).followSslRedirects(false).build()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _state = MutableStateFlow(WebSocketState.DISCONNECTED)
     override val state = _state.asStateFlow()

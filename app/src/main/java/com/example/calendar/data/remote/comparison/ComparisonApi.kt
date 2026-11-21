@@ -69,6 +69,7 @@ class ComparisonApi(private val baseUrlProvider: () -> String) {
 
     suspend fun accept(sessionId: String, token: String) = sessionAction(sessionId, "accept", token)
     suspend fun reject(sessionId: String, token: String) = sessionAction(sessionId, "reject", token)
+    suspend fun complete(sessionId: String, token: String) = sessionAction(sessionId, "complete", token)
     suspend fun cancel(sessionId: String, token: String) = sessionAction(sessionId, "cancel", token)
 
     private suspend fun sessionAction(sessionId: String, action: String, token: String): RemoteComparisonSession =

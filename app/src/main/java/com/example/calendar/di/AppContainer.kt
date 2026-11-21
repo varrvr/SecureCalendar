@@ -89,6 +89,7 @@ class AppContainer(private val application: Application) {
         api = ComparisonApi(serverEndpointSettings::current),
         sessions = sessionRepository,
         serverSession = serverSessionManager,
-        webSocket = webSocketTransport
+        webSocket = webSocketTransport,
+        events = eventRepository
     )
 }

@@ -89,4 +89,7 @@
     <string name="cleaning_done">Clean! Waiting for the server…</string>
     <string name="cleaning_percent">Cleaned: %1$d%%</string>
     <string name="bee_description">Flying Bee2 bee</string>
+    <string name="comparison_result_empty">No matching public busy intervals</string>
+    <string name="comparison_result_found">Matching public busy intervals (UTC)</string>
+    <string name="comparison_result_interval">%1$s – %2$s</string>
 </resources>

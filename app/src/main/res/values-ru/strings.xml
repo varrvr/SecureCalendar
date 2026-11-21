@@ -88,4 +88,7 @@
     <string name="cleaning_done">Чисто! Ожидаем ответ сервера…</string>
     <string name="cleaning_percent">Очищено: %1$d%%</string>
     <string name="bee_description">Летающая пчёлка Bee2</string>
+    <string name="comparison_result_empty">Совпадающих публичных занятых интервалов нет</string>
+    <string name="comparison_result_found">Общие публичные занятые интервалы (UTC)</string>
+    <string name="comparison_result_interval">%1$s – %2$s</string>
 </resources>

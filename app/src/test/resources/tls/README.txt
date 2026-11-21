@@ -1,0 +1,1 @@
+Test-only self-signed RSA server keystore. Password: test-only. Used only by JVM TLS rejection tests, never trusted by app, never packaged in APK, not a deployment key. Generated with JDK keytool, SAN localhost / 127.0.0.1.

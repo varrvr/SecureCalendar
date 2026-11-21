@@ -1,4 +1,14 @@
+# Current security status (2026-11-21)
+
+The previous missing-engine findings below are historical. A real Bee2 OPRF-PSI project profile is implemented and tested end-to-end through local HTTPS/WSS with two real accounts and Room calendars. See psi-protocol.md, threat-model.md, and local-comparison.md. The participants and relay are trusted; malicious-secure PSI is not claimed. The custom BIGN/BELT instantiation and native timing/memory safety have not received an independent security audit. Fixed BAKE SWU remains separate from the new RFC 9380 two-map SSWU profile. Only arm64-v8a is packaged.
+
+The local debug CA is confined to debug resources; private CA/server keys stay in ignored .runtime. System certificate and hostname verification remain enabled, and Android tests reject a different self-signed certificate for both REST and WS. Existing saved HTTP endpoints must be changed in Profile for MITM protection. Physical-phone connectivity has not been tested here. Calendar semantics remain public busy quarter-hour UTC slots, not exact second-resolution overlap or common free time. No new product limits were added; existing resource/time/relay limits remain.
+
+## Historical audit notes (superseded where described above)
+
 # Security limitations and threat notes
+
+> Действующая модель: [threat-model.md](threat-model.md). Пользователь доверяет серверу и подтверждённым собеседникам; требуется защита от MITM. Прежние требования malicious security ниже — исторические и больше не обязательны. Ограничения корректности HashToGroup и незавершённого PSI сохраняются.
 
 - There is no production PSI implementation in this repository. Comparison must remain unavailable; never show SUCCESS or EMPTY without a verified engine result.
 - Android↔Python OPAQUE interoperability is implemented and exercised end to end. The exact suite is P-256 OPRF, TripleDH over P-256/SHA-256, Identity KSF, with username as client identity and fixed context/server identity. The local `opaque-snake-p256` Rust wrapper is project-specific and has not received an independent security audit.

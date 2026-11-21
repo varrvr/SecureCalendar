@@ -23,7 +23,7 @@ import java.util.UUID
 
 class ComparisonFlowUiTest {
     @get:Rule val compose = createComposeRule()
-    @Test fun bobSeesRealInviteAndAcceptsItWithoutFakePsiSuccess(): Unit = runBlocking {
+    @Test fun bobAcceptsRealInviteAndBothViewModelsDisplayRealPsiResult(): Unit = runBlocking {
         grantLocalNetworkForTests()
         val suffix = UUID.randomUUID().toString().replace("-", "").take(10)
         val aliceName = "ui_alice_$suffix"
@@ -40,8 +40,13 @@ class ComparisonFlowUiTest {
         val publicKey = Base64.encodeToString(key.publicKey, Base64.NO_WRAP)
         key.privateKey.fill(0)
         val api = ComparisonApi(endpoint)
-        val aliceRepo = ComparisonRepositoryImpl(api, aliceOwner, aliceSession, aliceWs)
-        val bobRepo = ComparisonRepositoryImpl(api, bobOwner, bobSession, bobWs)
+        val aliceCalendar = ComparisonTestCalendar(aliceOwner)
+        val bobCalendar = ComparisonTestCalendar(bobOwner)
+        val aliceRepo = ComparisonRepositoryImpl(api, aliceOwner, aliceSession, aliceWs, aliceCalendar.events)
+        val bobRepo = ComparisonRepositoryImpl(api, bobOwner, bobSession, bobWs, bobCalendar.events)
+        val start = java.time.LocalDate.now(java.time.ZoneOffset.UTC).atStartOfDay(java.time.ZoneOffset.UTC).toEpochSecond() + 3600
+        aliceCalendar.add(start, start + 1800)
+        bobCalendar.add(start + 900, start + 2700)
         fun auth(session: ServerSessionManager, ws: WebSocketTransport) = ServerAuthRepositoryImpl(
             OpaqueClientImpl(OpaqueParameters.context, OpaqueParameters.serverIdentifier),
             AuthApi(endpoint), session, ws, { wsUrl })
@@ -57,6 +62,8 @@ class ComparisonFlowUiTest {
                     bobVm = ComparisonViewModel(bobRepo)
                     store.put("alice", aliceVm); store.put("bob", bobVm)
                     aliceVm.selectAccount(800001); bobVm.selectAccount(800002)
+                    val date = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+                    aliceVm.setPeriodStart(date); aliceVm.setPeriodEnd(date)
                 }
                 aliceVm.state.first { it.isConnected }
                 bobVm.state.first { it.isConnected }
@@ -76,19 +83,21 @@ class ComparisonFlowUiTest {
                 val context = InstrumentationRegistry.getInstrumentation().targetContext
                 compose.onNodeWithText(context.getString(R.string.comparison_invite_from, aliceName)).performScrollTo().assertIsDisplayed()
                 compose.onNodeWithText(context.getString(R.string.comparison_accept)).performScrollTo().performClick()
-                bobVm.state.first { it.errorRes == R.string.comparison_crypto_unavailable }
-                aliceVm.state.first { it.errorRes == R.string.comparison_crypto_unavailable }
-                assertTrue(aliceVm.state.value.intersections.isEmpty())
-                assertEquals(ComparisonStatus.ERROR, aliceVm.state.value.status)
-                compose.onNodeWithText(context.getString(R.string.comparison_crypto_unavailable)).performScrollTo().assertIsDisplayed()
-                assertEquals("accepted", aliceRepo.session(invite.sessionId).status)
-                bobRepo.cancel(invite.sessionId)
+                bobVm.state.first { it.status in setOf(ComparisonStatus.SUCCESS, ComparisonStatus.EMPTY, ComparisonStatus.ERROR) }
+                aliceVm.state.first { it.status in setOf(ComparisonStatus.SUCCESS, ComparisonStatus.EMPTY, ComparisonStatus.ERROR) }
+                assertEquals(ComparisonStatus.SUCCESS, aliceVm.state.value.status)
+                assertEquals(ComparisonStatus.SUCCESS, bobVm.state.value.status)
+                assertEquals(aliceVm.state.value.intersections, bobVm.state.value.intersections)
+                assertEquals(1, bobVm.state.value.intersections.size)
+                compose.onNodeWithText(context.getString(R.string.comparison_result_found)).performScrollTo().assertIsDisplayed()
+                assertEquals("completed", aliceRepo.session(invite.sessionId).status)
             }
         } finally {
             withContext(Dispatchers.Main) { store.clear() }
             aliceWs.disconnect(); bobWs.disconnect()
             aliceSession.clear(); bobSession.clear()
             key.publicKey.fill(0)
+            aliceCalendar.close(); bobCalendar.close()
         }
     }
 }

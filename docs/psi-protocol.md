@@ -1,39 +1,25 @@
-# PSI protocol status
+# Реализованный локальный OPRF-PSI
 
-## Current status
+Действующая модель — доверенные сервер и подтвердивший запрос peer; сетевой MITM закрывается HTTPS/WSS с проверкой сертификата. Bee2 сохранён. Результат получают оба. См. `threat-model.md`, `local-comparison.md`.
 
-The repository contains a raw WebSocket relay, a `PsiEngine` interface, and a fail-closed `PsiSessionStateMachine` lifecycle/routing guard, but no approved ECDH-PSI protocol specification or implementation. The guard checks local session transitions and relay sender/recipient/session identifiers; it does not define cryptographic rounds or validate payload meaning. Therefore the Android app does not create PSI messages, exchange calendar slots, or report successful/empty comparisons. There is no demo set intersection.
+## Профиль SC-OPRF-PSI-v1-BIGN128-XMD-BELT-SSWU-RO
 
-The Python relay forwards a JSON envelope with `type`, `session_id`, `recipient_id`, and `payload`, and adds `sender_id`, `recipient_id`, and server time on delivery. It checks that the authenticated account is a participant in an accepted/active server session. Payload semantics are opaque to the server. This transport envelope is not itself a PSI protocol.
+Проектный профиль, не зарегистрированный IETF suite. BIGN OID 1.2.112.0.2.0.34.101.45.3.1; p=2^256-189, стандартные A/B/q Bee2, cofactor 1. Ненулевые скаляры выбираются SecureRandom rejection sampling в [1,q-1], 32-byte LE. Точки — канонические x||y, 64-byte LE; bignDH/bignPubkeyVal проверяют входы. hash-times-generator не используется.
 
-## Required protocol agreement
+HashToGroup: expand_message_xmd RFC 9380 §5.3.1 с BELT (output=32, block=32), hash_to_field count=2,L=48 (big-endian reduction modulo p), SSWU §6.6.2 с Z=-11, сумма двух точек, h=1. DST — ASCII profile + `/H1`. Четыре критерия Z проверяются независимым скриптом, 122 вектора совпали с native Bee2. Identity на выходе отвергается, fallback отсутствует. Базовая арифметика исполняется в Bee2; не заявляется независимый аудит или подтверждённый constant-time всего адаптера.
 
-Before implementing a real engine, both developers must agree and record:
+Context кодируется DataOutputStream: writeUTF(profile), writeUTF(sessionId), writeLong(initiatorId), writeLong(responderId), writeLong(periodStartSeconds), writeLong(periodEndSeconds). writeUTF — modified UTF-8 с двухбайтовой длиной; используемые profile/session UUID ASCII. Вход H1 — context || signed int64 BE UTC slot number. Finalize = BELT(ASCII(profile+'/Finalize') || context || slot8BE || point64LE).
 
-- exact PSI construction and security goal (semi-honest or malicious security);
-- curve and subgroup, scalar/point encoding and validation rules;
-- hash-to-curve suite, domain separation and test vectors;
-- role and round sequence, message size limits, replay handling and cancellation;
-- transcript authentication/signature binding to protocol version, session, peers, direction and round;
-- which party learns the intersection, whether cardinality leaks, and any padding/bucketing policy;
-- canonical slot encoding and cross-language transcript vectors.
+## Шаги
 
-## Current Android boundary
+Оба клиента создают listener до согласования готовности, читают публичные busy события локально, обрезают периодом и преобразуют в упорядоченные 15-минутные слоты. Обмениваются ready.
 
-`PsiCrypto` delegates hash-to-curve to an explicitly injected implementation. No implementation is supplied. It does not fall back to `hash(element) * G`. `SlotConverter` prepares canonical sorted UTC slot identifiers locally; callers must not serialize that set directly to the server. `PsiUnavailableException` remains the expected behavior until an engine is reviewed and tested.
+B генерирует отдельный временный k, вычисляет U={Finalize(y,kH1(y))}, сортирует PRF outputs и передаёт U. A маскирует каждую H1(x) независимым ненулевым r_x и отправляет M_x=r_x H1(x). B отвечает Z_x=kM_x. A снимает маску N_x=r_x^-1 Z_x, финализирует и сравнивает PRF outputs с U. Это криптографическое пересечение, не пересечение открытых расписаний.
 
+A передаёт B только совпавшие PRF outputs. B сопоставляет их со своим локальным отображением и возвращает BELT-подтверждение списка. Оба получают интервалы; инициатор завершает серверную сессию через существующий /complete. Пересечение раскрывается обеим сторонам намеренно; размеры/трафик не скрываются. Секрет k и все r_x стираются в finally, обратный скаляр стирается нативно.
 
-## Integration update 2026-11-20
+## Транспорт и ошибки
 
-Android now reconciles persisted HTTP invitation/session states with WS triggers, enters PSI preparation only after server acceptance, constructs a guarded session with **server** participant IDs and fails closed through PsiUnavailableException. No local slot set is serialized at this boundary. The real two-account Compose test confirms both parties display crypto unavailable after acceptance. The relay accepts only psi_* envelopes with nonempty valid Base64, overwrites sender_id from auth, rejects wrong session/recipient/status and exact replay; server control events cannot be sent via relay. Replay fingerprints are routing metadata, not cryptographic transcript verification.
+Существующий relay envelope: type=psi_oprf, session_id, recipient_id, Base64 payload; сервер добавляет аутентифицированный sender_id. Payload JSON: profile, context (Base64 BELT(context)), phase, seq, last, items (Base64). Фазы ready,outputs,query,evaluated,matches,ack; партии до 1024 элементов, пустая партия имеет last=true. Проверяются profile/context/session/peer/recipient/фаза/последовательность/длины/точки/кардинальности. При ошибке — abort и отсутствие результата. psi_abort прекращает ожидание peer, не содержит слот/текст исключения. Есть технические timeout, ограниченные входные очереди и server replay guards.
 
-The current UI explicitly describes overlap of public **busy** 15-minute UTC slots; private events are excluded. Common free intervals are a different product contract and have not been substituted. As no engine exists, neither kind of result is currently produced. See integration-report.md for the exact remaining native/protocol contracts.
-
-
-## Обязательная модель безопасности (уточнение пользователя)
-
-Требуется защита от собеседника, намеренно нарушающего протокол, то есть malicious security, а не только semi-honest. Простое двойное ECDH-маскирование с подписями не считается выполнением этого требования. Должны проверяться криптографические доказательства/consistency checks выбранного опубликованного протокола, с остановкой при нарушении. Заявление README само по себе не является подтверждением реализации.
-
-Добавленная Bee2 BAKE SWU mapping operation проверена по стандартному вектору на host и Android, но не является полным random-oracle HashToCurve suite или malicious-secure PSI. Нельзя автоматически активировать SUCCESS/EMPTY после появления этой библиотеки.
-
-Malicious security допускает abort и не доказывает правдивость календаря собеседника. Произвольно выбранные входы и повторные согласованные запросы требуют политики доступа; никто не должен обещать защиту от раскрытия, разрешённого самим результатом PSI. См. `psi-malicious-plan.md`.
+Malicious-secure PSI не требуется выбранной моделью и не заявляется. Проверки входных данных сохранены. Источники: https://www.rfc-editor.org/rfc/rfc9380.html , https://github.com/agievich/bee2 .

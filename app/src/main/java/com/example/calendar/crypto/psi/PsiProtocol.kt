@@ -41,4 +41,4 @@ interface PsiEngine {
     fun observeState(sessionId: String): Flow<PsiSessionState>
 }
 
-class PsiUnavailableException : UnsupportedOperationException("Защищённое сравнение пока недоступно")
+class PsiUnavailableException(cause: Throwable? = null) : UnsupportedOperationException("Защищённое сравнение пока недоступно", cause)

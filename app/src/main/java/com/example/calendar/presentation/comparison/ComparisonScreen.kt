@@ -126,6 +126,7 @@ fun ComparisonScreen(
             ComparisonStatus.PROCESSING -> {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
                 Text(stringResource(R.string.comparison_processing))
+                OutlinedButton(onClick = onCancelRequest) { Text(stringResource(R.string.comparison_cancel)) }
             }
             ComparisonStatus.REJECTED -> Text(stringResource(R.string.comparison_rejected))
             ComparisonStatus.ERROR -> {
@@ -133,8 +134,11 @@ fun ComparisonScreen(
                 OutlinedButton(onClick = onRetryClick, enabled = !state.isSubmitting) { Text(stringResource(R.string.comparison_retry)) }
             }
             ComparisonStatus.SUCCESS, ComparisonStatus.EMPTY -> {
-                // No verified result contract is installed. Fail closed even with an invalid caller state.
-                Text(stringResource(R.string.comparison_crypto_unavailable))
+                Text(stringResource(if (state.status == ComparisonStatus.EMPTY) R.string.comparison_result_empty else R.string.comparison_result_found))
+                state.intersections.forEach { interval ->
+                    val format = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm", ruLocale).withZone(ZoneId.of("UTC"))
+                    Text(stringResource(R.string.comparison_result_interval, format.format(interval.start), format.format(interval.end)))
+                }
             }
         }
         state.errorRes?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }

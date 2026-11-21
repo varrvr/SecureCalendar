@@ -135,9 +135,12 @@ class ComparisonViewModel(private val repository: ComparisonRepository) : ViewMo
         if (version != generation) return
         _state.update { it.copy(status = ComparisonStatus.PROCESSING, errorRes = null) }
         try {
-            repository.preparePsi(id)
-            // A future engine must return a verified result through a separate result contract.
-            _state.update { it.copy(status = ComparisonStatus.ERROR, errorRes = R.string.comparison_crypto_unavailable) }
+            val intervals = repository.preparePsi(id)
+            if (version != generation) return
+            _state.update { it.copy(status = if (intervals.isEmpty()) ComparisonStatus.EMPTY else ComparisonStatus.SUCCESS,
+                intersections = intervals, errorRes = null) }
+        } catch (timedOut: TimeoutCancellationException) {
+            if (version == generation) _state.update { it.copy(status = ComparisonStatus.ERROR, errorRes = R.string.comparison_timeout) }
         } catch (c: CancellationException) { throw c }
         catch (failure: Exception) {
             if (version == generation) _state.update { it.copy(status = ComparisonStatus.ERROR,
@@ -164,7 +167,9 @@ class ComparisonViewModel(private val repository: ComparisonRepository) : ViewMo
     }
     fun cancelRequest() {
         val id = _state.value.currentSessionId ?: return
-        if (operation?.isActive == true) return
+        if (_state.value.status == ComparisonStatus.PROCESSING) {
+            operation?.cancel(); refresh?.cancel()
+        } else if (operation?.isActive == true) return
         val version = generation
         operation = viewModelScope.launch {
             try {

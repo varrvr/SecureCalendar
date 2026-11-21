@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.Flow
 interface ComparisonRepository {
     val connected: Flow<Boolean>
     val signals: Flow<ComparisonSignal>
-    suspend fun preparePsi(sessionId: String)
+    suspend fun preparePsi(sessionId: String): List<com.example.calendar.domain.model.TimeInterval>
     suspend fun session(sessionId: String): ComparisonInvite
     suspend fun searchUsers(query: String): List<ComparisonPeer>
     suspend fun createRequest(username: String, startEpochSeconds: Long, endEpochSeconds: Long): ComparisonInvite

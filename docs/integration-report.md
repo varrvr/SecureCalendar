@@ -140,3 +140,15 @@ Build/native: `app/build.gradle.kts`, `gradle/libs.versions.toml`, `AndroidManif
 Актуальная Android проверка: **16 instrumentation tests**, 0 failures/errors/skips; JVM — **15 tests**, без ошибок. Последний device run использовал `-PsecureCalendarIntegrationTests=true` и отдельный пакет `com.example.calendar.integrationtest`. Один предыдущий device run встретил device offline при установке; его зелёный Gradle exit не считался доказательством. После восстановления ADB тесты выполнены повторно и результаты XML проверены.
 
 Пользователь явно выбрал защиту от нарушающего протокол собеседника. Поэтому простая semi-honest ECDH-схема не включена. Полный malicious-secure PSI остаётся BLOCKED; стандартное fixed-input BAKE SWU отображение не является само по себе complete HashToCurve suite или malicious PSI engine. План и найденные ограничения кандидатов — `docs/psi-malicious-plan.md`. VOLE-PSI изучается отдельно в `.tools` и не заменяет Bee2 в приложении.
+
+## Уточнение модели: доверенный сервер/peer, MITM
+
+Действующая модель пользователя зафиксирована в `threat-model.md`: прежний обязательный malicious PSI отменён. Bee2 остаётся, период инициатора, двусторонний результат, дополнительных продуктовых лимитов нет; действующая семантика busy/public сохранена.
+
+Защита транспорта: WebSocket запретил redirects (включая cross-host и downgrade); стандартная проверка TLS не ослаблялась. Новые JVM tests на реальных локальных сокетах проверяют отсутствие перехода с токеном и отклонение самоподписанного TLS peer до HTTP. Все 17 JVM tests прошли. Повторные Android instrumentation: 18 tests, 0 failures/errors/skips. assembleDebug и assembleDebugAndroidTest прошли. Тесты запросов по-прежнему ожидают недоступность незавершённого PSI; они не подтверждают вычисление пересечения.
+
+Реальный доверенный HTTPS endpoint не предоставлен и на устройствах не проверен. HTTP/WS debug остаётся режимом диагностики без защиты от MITM. Завершённый Bee2 OPRF/PSI, включая HashToGroup profile и двусторонний output, остаётся BLOCKED; снятие требования malicious security само по себе не включает engine.
+
+## 21.11.2026 — локальное сравнение реализовано
+
+WORKING_AND_TESTED: два Android аккаунта → OPAQUE → локальный HTTPS/WSS Python → приглашение/принятие → настоящий Bee2 HashedDH OPRF-PSI → одинаковое пересечение публичных busy слотов у обоих → Compose результат → completed. Приватные события исключены. 22 Android tests, 0 failures/errors/skips. Нативная mapping проверена на 122 независимых примерах и полном XMD/SSWU векторе. 11 Python tests passed. Прежние BLOCKED из-за отсутствия engine выше — исторические, больше не актуальны. Подробности: local-comparison.md, psi-protocol.md. Физический телефон и независимый криптографический аудит не проверены; IETF-совместимость BIGN/BELT suite не заявляется.
