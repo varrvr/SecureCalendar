@@ -179,7 +179,8 @@ fun SecureCalendarApp(
                 onPublicChange = calendarViewModel::changePublic,
                 onSaveClick = calendarViewModel::saveEditor,
                 onDeleteClick = calendarViewModel::deleteEditor,
-                onBackClick = calendarViewModel::closeEditor
+                onBackClick = calendarViewModel::closeEditor,
+                modifier = modifier
             )
     } else {
             when (page) {
@@ -324,6 +325,7 @@ fun SecureCalendarApp(
                 AppPage.COMPARISON -> {
                     ComparisonScreen(
                         state = comparison,
+                        events = events,
                         onUserSelected = {
                             comparisonViewModel.selectUser(it)
                         },

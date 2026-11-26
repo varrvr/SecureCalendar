@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/agievich/bee2",
+  "commit": "4341f7a5c300f8e6dc292559e671eb899d831433",
+  "license": "Apache-2.0",
+  "curve_oid": "1.2.112.0.2.0.34.101.45.3.1",
+  "operation": "bakeSWU, STB 34.101.66 section 6.2.3",
+  "test_vector": "test/crypto/bake_test.c: BAKE SWU check based on table B.4"
+}

@@ -6,8 +6,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
+import com.example.calendar.SecureCalendarApplication
+import com.example.calendar.articles.ArticleOfDayButton
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -37,6 +41,7 @@ fun CalendarScreen(
     onAddEventClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val articleRepository = (LocalContext.current.applicationContext as SecureCalendarApplication).container.dailyArticleRepository
     val zone = ZoneId.systemDefault()
 
     val bounds = dayBounds(selectedDate, zone)
@@ -84,34 +89,30 @@ fun CalendarScreen(
 
                     Spacer(Modifier.height(20.dp))
 
-                    Text(
-                        text = selectedDate.format(
-                            DateTimeFormatter.ofPattern(
-                                "d MMMM, EEEE",
-                                ruLocale
-                            )
-                        ),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(24.dp)
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text(selectedDate.format(DateTimeFormatter.ofPattern("d MMMM, EEEE", ruLocale)),
+                                style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                            HoroscopeCard(eventId = "day:$selectedDate")
+                            ArticleOfDayButton(date = selectedDate, repository = articleRepository)
+                        }
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    Text("Встречи · ${selectedEvents.size}", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(12.dp))
                 }
             }
-            item(key = "horoscope-$selectedDate") {
-                HoroscopeCard(
-                    eventId = "day:$selectedDate",
-                    title = "Гороскоп на день",
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-            }
             if (selectedEvents.isEmpty()) {
                 item {
-                    Text(
-                        text = "На этот день встреч нет",
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("День без встреч", style = MaterialTheme.typography.titleMedium)
+                        Text("Оставьте время для себя или запланируйте что-нибудь приятное.",
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = onAddEventClick) { Text("Добавить встречу") }
+                    }
                 }
             } else {
                 items(items = selectedEvents, key = { it.id }) { event ->
@@ -125,16 +126,15 @@ fun CalendarScreen(
         }
 
 
-        FloatingActionButton(
+        ExtendedFloatingActionButton(
             onClick = onAddEventClick,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Создать встречу"
-            )
+            Icon(Icons.Default.Add, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Новая встреча")
         }
     }
 }

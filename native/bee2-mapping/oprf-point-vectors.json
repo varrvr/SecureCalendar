@@ -1,0 +1,10 @@
+{
+  "source_point": "upstream BAKE SWU standard vector",
+  "order_le": "07663d2699bf5a7efc4dfb0dd68e5cd9ffffffffffffffffffffffffffffffff",
+  "point": "014417d3355557317d2e2ab6d08754878d19e8d97b71fdc95dbb2a9b894d16d77704a0b5caa9cda10791e4760671e1050ddeab7083a7458447866adb01473810",
+  "twice": "c54fdfbb4ef1ad0a12e9079232c78d814969607a7f4f8c228e0ded2061821269920949ff1743e549cb0a00900a29b65f4862824472de21657780a2f5e2cd92bb",
+  "triple": "2f5b956fe8855697076c15aea9f28826e9de1026da77acf0fcbef449f470953b3dac53d15663667f99e666ebe9d8f9ed2af59d61e4e7391ae4ef0fc2b6e61200",
+  "sixfold": "7259ddc4f169b2516513e753325b39272239f63ceccf0fec79cfe1a194183732c9f2931d007ab90c98f8b824b467a591a47b7def60c3b2c635db6661b1a6e5cc",
+  "inverse_two": "04b31e93cc5f2d3ffea6fd066b47aeecffffffffffffffffffffffffffffff7f",
+  "reference": "Independent Python integer affine curve arithmetic; not production cryptography or a PSI result"
+}

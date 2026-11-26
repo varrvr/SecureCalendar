@@ -7,10 +7,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Today
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.example.calendar.presentation.components.DateSelectionDialog
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,40 +50,44 @@ fun MonthCalendar(
     modifier: Modifier = Modifier
 ) {
     val today = LocalDate.now()
+    var chooseDate by rememberSaveable { mutableStateOf(false) }
+    if (chooseDate) DateSelectionDialog(selectedDate, "Перейти к дню", { chooseDate = false }) {
+        onDateSelected(it)
+        chooseDate = false
+    }
 
     Column(modifier) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = month.format(monthFormatter)
-                    .replaceFirstChar { it.titlecase(ruLocale) },
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f)
-            )
-
-            TextButton(onClick = onTodayClick) {
-                Text("Сегодня")
+            TextButton(onClick = { chooseDate = true }, modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(vertical = 8.dp)) {
+                Text(month.format(monthFormatter).replaceFirstChar { it.titlecase(ruLocale) },
+                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                Icon(Icons.Outlined.ExpandMore, null, modifier = Modifier.size(20.dp))
+            }
+            IconButton(onClick = onTodayClick) {
+                Icon(Icons.Outlined.Today, contentDescription = "Перейти к сегодняшнему дню")
             }
 
             IconButton(onClick = onPreviousMonth) {
                 Icon(
-                    Icons.Default.KeyboardArrowLeft,
+                    Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                     contentDescription = "Предыдущий месяц"
                 )
             }
 
             IconButton(onClick = onNextMonth) {
                 Icon(
-                    Icons.Default.KeyboardArrowRight,
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = "Следующий месяц"
                 )
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
 
         Row(Modifier.fillMaxWidth()) {
             listOf(
@@ -115,7 +123,7 @@ fun MonthCalendar(
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .height(52.dp)
+                            .height(48.dp)
                             .padding(2.dp)
                             .background(
                                 color = if (selected) {

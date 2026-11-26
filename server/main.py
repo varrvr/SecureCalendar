@@ -67,8 +67,8 @@ class RegisterStartRequest(BaseModel):
     @field_validator("username")
     @classmethod
     def canonical_username(cls, value: str) -> str:
-        if value != value.strip().lower() or not re.fullmatch(r"[a-z0-9_.-]{3,64}", value):
-            raise ValueError("username_must_be_lowercase_ascii")
+        if value != value.strip().lower() or not re.fullmatch(r"[a-zа-яё0-9_.-]{3,64}", value):
+            raise ValueError("username_must_be_lowercase_latin_or_cyrillic")
         return value
 
 

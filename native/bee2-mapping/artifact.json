@@ -1,0 +1,20 @@
+{
+  "repository": "https://github.com/agievich/bee2",
+  "commit": "4341f7a5c300f8e6dc292559e671eb899d831433",
+  "license": "Apache-2.0",
+  "curve_oid": "1.2.112.0.2.0.34.101.45.3.1",
+  "operation": "bakeSWU, STB 34.101.66 section 6.2.3",
+  "test_vector": "test/crypto/bake_test.c: BAKE SWU check based on table B.4",
+  "abi": "arm64-v8a",
+  "sha256": "60b324bb2b7e82d9d1cbcea2eb757c9129585e0bbb157735350192197b383e07",
+  "sources": {
+    "mapping.c": "d4b8115d723aae578c46cb74faec2105f67871b294535825a5161e93351646fa",
+    "mapping.h": "e48d6de8d209ac9840142fc9eeba5238576ff5ad5945530805814e13421b1393",
+    "oprf_point.c": "fbc6095a15490217533812f69aba19a341706def71259d7a27d4aceeb01bd35c",
+    "oprf_point.h": "c001cd49d71d81341131b9703dce959283dfe909c987c5b6d7ebcd0456c1c780",
+    "hash_group.c": "8969ebb02c3d7ef22568d804b93fefb37bc9b72ffbf15a03e3fa310138a25186",
+    "hash_group.h": "b087f9c168e3c90929e1618c58c369de06d1baea201a7c9f6e9ff6e40153ce69",
+    "mapping_jni.c": "df44c65e2bb3a883b6e1e5207f30af04449b205068723cc370d9caca93ee239c",
+    "CMakeLists.txt": "2379490afefb5d74ecd3892d57835429f9228162e1eef90e5b2d702c5c96c4aa"
+  }
+}

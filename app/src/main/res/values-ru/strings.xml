@@ -2,12 +2,12 @@
     <string name="comparison_title">Сравнение календарей</string>
     <string name="comparison_connected">Сервер подключён</string>
     <string name="comparison_disconnected">Нет подключения к серверу. Подключитесь в профиле.</string>
-    <string name="comparison_semantics">Сравниваются занятые слоты публичных событий. Даты включительно, в UTC. Приватные события исключены.</string>
+    <string name="comparison_semantics">Сравниваются занятые слоты публичных событий. Даты включительно, по минскому времени (UTC+3). Приватные события исключены.</string>
     <string name="comparison_username">Логин собеседника</string>
     <string name="comparison_find">Найти пользователя</string>
     <string name="comparison_period_start">Начало периода</string>
     <string name="comparison_period_end">Конец периода</string>
-    <string name="comparison_period">Период: %1$s — %2$s (UTC)</string>
+    <string name="comparison_period">Период: %1$s — %2$s (Минск, UTC+3)</string>
     <string name="comparison_invalid_period">Конец периода не может быть раньше начала</string>
     <string name="comparison_send">Отправить запрос на сравнение</string>
     <string name="comparison_inbox">Входящие запросы</string>
@@ -89,6 +89,6 @@
     <string name="cleaning_percent">Очищено: %1$d%%</string>
     <string name="bee_description">Летающая пчёлка Bee2</string>
     <string name="comparison_result_empty">Совпадающих публичных занятых интервалов нет</string>
-    <string name="comparison_result_found">Общие публичные занятые интервалы (UTC)</string>
+    <string name="comparison_result_found">Общие публичные занятые интервалы (Минск, UTC+3)</string>
     <string name="comparison_result_interval">%1$s – %2$s</string>
 </resources>

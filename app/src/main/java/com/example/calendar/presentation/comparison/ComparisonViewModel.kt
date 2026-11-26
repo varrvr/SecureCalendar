@@ -8,7 +8,6 @@ import com.example.calendar.domain.repository.ComparisonRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.time.LocalDate
-import java.time.ZoneOffset
 
 /** REST is the durable source of truth; WebSocket events trigger immediate reconciliation. */
 class ComparisonViewModel(private val repository: ComparisonRepository) : ViewModel() {
@@ -88,9 +87,9 @@ class ComparisonViewModel(private val repository: ComparisonRepository) : ViewMo
         _state.update { it.copy(isSubmitting = true, errorRes = null) }
         operation = viewModelScope.launch {
             try {
+                val period = comparisonPeriod(current.periodStart, current.periodEnd)
                 val invite = repository.createRequest(current.selectedUser.orEmpty().trim().lowercase(),
-                    current.periodStart.atStartOfDay(ZoneOffset.UTC).toEpochSecond(),
-                    current.periodEnd.plusDays(1).atStartOfDay(ZoneOffset.UTC).toEpochSecond())
+                    period.start.epochSecond, period.end.epochSecond)
                 if (version != generation) return@launch
                 _state.update { it.copy(currentSessionId = invite.sessionId, status = ComparisonStatus.WAITING) }
                 timeout?.cancel()

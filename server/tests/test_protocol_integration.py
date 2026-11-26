@@ -182,3 +182,21 @@ def test_unauthenticated_websocket_rejected(client):
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect("/ws?token=invalid"):
             pass
+
+
+def test_cyrillic_username_registration_login_and_search(client):
+    sofia, password = register(client, "софия_ё")
+    authenticated, _ = login(client, "софия_ё", password)
+    assert authenticated["user"]["id"] == sofia["user"]["id"]
+    assert client.get("/users/me", headers=headers(authenticated)).json()["username"] == "софия_ё"
+    alice, _ = register(client, "alice")
+    results = client.get("/users", headers=headers(alice), params={"query": "СОФИЯ"}).json()
+    assert [user["username"] for user in results] == ["софия_ё"]
+
+
+@pytest.mark.parametrize("username", [" софия", "София", "софия пробел", "софия@почта", "ab"])
+def test_username_canonical_form_is_still_required(username):
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        main.RegisterStartRequest(username=username, display_name="София", public_key="key",
+                                  registration_request="AA==")

@@ -77,6 +77,7 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     implementation(libs.okhttp)
+    implementation("com.google.mlkit:translate:17.0.3")
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)
     androidTestImplementation("androidx.test:runner:1.7.0")

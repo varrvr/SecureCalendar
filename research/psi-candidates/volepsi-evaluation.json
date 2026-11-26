@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/ladnir/volepsi",
+  "commit": "1ecfe796c661085f21d37c7945bba11e9f54e04d",
+  "tests_passed": [
+    "Psi_Rs_mal_test",
+    "RsOprf_mal_test",
+    "RsOprf_salt_order_test",
+    "RsOprf_seed_rejection_test",
+    "RsOprf_ribbon_seed_test",
+    "RsOprf_localAbort_test",
+    "RsOprf_peerAbort_test"
+  ],
+  "success": true,
+  "exit_code": 0,
+  "elapsed_seconds": 0.73,
+  "android_backend_enabled": false,
+  "independent_security_audit": false
+}

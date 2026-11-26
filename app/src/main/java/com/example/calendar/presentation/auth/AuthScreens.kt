@@ -13,6 +13,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.calendar.presentation.components.russianTextKeyboard
+import com.example.calendar.presentation.components.russianLoginKeyboard
+import com.example.calendar.presentation.components.russianPasswordKeyboard
+import com.example.calendar.presentation.components.KeyboardLanguageSettingsButton
 
 
 data class LoginUiState(
@@ -52,6 +56,7 @@ private fun PasswordField(
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
+        keyboardOptions = russianPasswordKeyboard,
         label = { Text(label) },
         modifier = Modifier.fillMaxWidth(),
         enabled = enabled,
@@ -113,6 +118,7 @@ fun LoginScreen(
         OutlinedTextField(
             value = state.login,
             onValueChange = onLoginChange,
+            keyboardOptions = russianLoginKeyboard,
             label = { Text("Логин") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
@@ -141,7 +147,7 @@ fun LoginScreen(
         Button(
             onClick = onLoginClick,
             enabled = !state.isLoading,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
         ) {
             if (state.isLoading) {
                 CircularProgressIndicator(
@@ -155,10 +161,12 @@ fun LoginScreen(
 
         TextButton(
             onClick = onRegisterClick,
-            enabled = !state.isLoading
+            enabled = !state.isLoading,
+            modifier = Modifier.fillMaxWidth()
         ) {
             Text("Создать аккаунт")
         }
+        KeyboardLanguageSettingsButton(Modifier.fillMaxWidth())
     }
 }
 
@@ -189,6 +197,7 @@ fun RegisterScreen(
         OutlinedTextField(
             value = state.username,
             onValueChange = onUsernameChange,
+            keyboardOptions = russianTextKeyboard,
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Имя пользователя") },
             singleLine = true,
@@ -202,6 +211,7 @@ fun RegisterScreen(
         OutlinedTextField(
             value = state.login,
             onValueChange = onLoginChange,
+            keyboardOptions = russianLoginKeyboard,
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Логин") },
             singleLine = true,
@@ -238,7 +248,7 @@ fun RegisterScreen(
         Button(
             onClick = onRegisterClick,
             enabled = !state.isLoading,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
         ) {
             if (state.isLoading) {
                 CircularProgressIndicator(
@@ -252,9 +262,11 @@ fun RegisterScreen(
 
         TextButton(
             onClick = onLoginClick,
-            enabled = !state.isLoading
+            enabled = !state.isLoading,
+            modifier = Modifier.fillMaxWidth()
         ) {
             Text("Уже есть аккаунт? Войти")
         }
+        KeyboardLanguageSettingsButton(Modifier.fillMaxWidth())
     }
 }

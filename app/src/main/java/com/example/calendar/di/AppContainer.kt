@@ -29,6 +29,10 @@ import com.example.calendar.domain.repository.SessionRepository
 class AppContainer(private val application: Application) {
     fun string(id: Int): String = application.getString(id)
 
+    val dailyArticleRepository = com.example.calendar.articles.DailyArticleRepository(
+        com.example.calendar.articles.AndroidDailyArticleStore(application)
+    )
+
     val serverEndpointSettings = ServerEndpointSettings(application, BuildConfig.SERVER_BASE_URL)
 
     private val database = CalendarDatabase.getInstance(application)

@@ -3,12 +3,12 @@
     <string name="comparison_title">Calendar comparison</string>
     <string name="comparison_connected">Connected to server</string>
     <string name="comparison_disconnected">No server connection. Connect in Profile.</string>
-    <string name="comparison_semantics">Compare overlapping busy slots from public events. Dates are inclusive, in UTC. Private events stay excluded.</string>
+    <string name="comparison_semantics">Compare overlapping busy slots from public events. Dates are inclusive, in Minsk time (UTC+3). Private events stay excluded.</string>
     <string name="comparison_username">Peer username</string>
     <string name="comparison_find">Find user</string>
     <string name="comparison_period_start">Period start</string>
     <string name="comparison_period_end">Period end</string>
-    <string name="comparison_period">Period: %1$s — %2$s (UTC)</string>
+    <string name="comparison_period">Period: %1$s — %2$s (Minsk, UTC+3)</string>
     <string name="comparison_invalid_period">Period end must not precede its start</string>
     <string name="comparison_send">Send comparison request</string>
     <string name="comparison_inbox">Incoming requests</string>
@@ -90,6 +90,6 @@
     <string name="cleaning_percent">Cleaned: %1$d%%</string>
     <string name="bee_description">Flying Bee2 bee</string>
     <string name="comparison_result_empty">No matching public busy intervals</string>
-    <string name="comparison_result_found">Matching public busy intervals (UTC)</string>
+    <string name="comparison_result_found">Matching public busy intervals (Minsk, UTC+3)</string>
     <string name="comparison_result_interval">%1$s – %2$s</string>
 </resources>

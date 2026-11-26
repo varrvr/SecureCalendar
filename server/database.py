@@ -177,7 +177,7 @@ def get_user_by_username(username: str) -> Optional[dict]:
 
 
 def search_users(query: str, exclude_id: int, limit: int = 50) -> list[dict]:
-    q = f"%{query.strip()}%"
+    q = f"%{query.strip().lower()}%"
     with closing(get_conn()) as conn:
         rows = conn.execute(
             """
